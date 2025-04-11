@@ -62,7 +62,9 @@ $ GCC_EXTRA_CONFIGURE_FLAGS=--enable-cet make
 ```
 
 You should now be able to add "prefix/bin" to your PATH and use the
-cross-compiler tools, such as `riscv32-unknown-elf-gcc` and so on.
+cross-compiler tools. The tools will have a `riscv32-unknown-elf-`
+prefix, e.g. running `riscv32-unknown-elf-gcc` will give you the C
+compiler, `riscv32-unknown-elf-g++` is the C++ compiler, etc.
 
 
 # See also
@@ -73,8 +75,9 @@ update the original Mips2cs tool (from 2011) to use RISC-V instead of
 MIPS as the base instruction set, to create a C++ target program
 instead of C#, and to use the RISC-V "Zicfilp" extension
 (`-fcf-protection` gcc flag) as an accurate way of finding indirect
-branch points (avoiding the need for the `--emit-relocs` linker
-option).
+branch points (the original Mips2cs relied on the linker
+`--emit-relocs` option but `-fcf-protection` will probably be a
+simpler and more robust solution).
 
 See https://www.solarflare.org.uk/mips2cs for more details about
 Mips2cs.

@@ -3,14 +3,13 @@
 **NOTE: This is work in progress and not ready for use yet**
 
 This tool will convert a RISC-V ELF executable into a C++ class that
-performs the same function as the original executable, but in a
+performs the same operations as the original executable, but in a
 "virtual machine" environment.
 
 Specifically, the C++ class will have member variables representing
-the memory contents and registers of the original executable. Calling
-the `execute` function on the class will update the state of the
-memory and registers in the same way the original executable would
-have done.
+the memory contents and registers of the RISC-V machine. Calling the
+`execute` function on the class will update the state of the memory
+and registers in the same way the original executable would have done.
 
 If the original executable makes syscalls (or "ecalls" as RISC-V calls
 them), then these will be passed back to the host program (i.e. the
@@ -38,7 +37,7 @@ There also needs to be a way for `riscv2cpp` to find all possible
 indirect branch targets within the executable. The plan is to use the
 `-fcf-protection` gcc option, which makes the compiler insert special
 "landing pad" instructions into the code at appropriate points. We
-will see whether this works in practice!
+will see how well this works in practice!
 
 
 # Setting up the cross-compiler
@@ -76,3 +75,6 @@ instead of C#, and to use the RISC-V "Zicfilp" extension
 (`-fcf-protection` gcc flag) as an accurate way of finding indirect
 branch points (avoiding the need for the `--emit-relocs` linker
 option).
+
+See https://www.solarflare.org.uk/mips2cs for more details about
+Mips2cs.

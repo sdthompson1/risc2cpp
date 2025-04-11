@@ -36,8 +36,14 @@ architecture when it is built.)
 There also needs to be a way for `riscv2cpp` to find all possible
 indirect branch targets within the executable. The plan is to use the
 `-fcf-protection` gcc option, which makes the compiler insert special
-"landing pad" instructions into the code at appropriate points. We
-will see how well this works in practice!
+"landing pad" instructions into the code at appropriate points. This
+apparently needs a RISC-V extension called
+[Zicfilp](https://github.com/riscv/riscv-cfi/blob/main/src/cfi_forward.adoc),
+support for which is only recently being added to gcc, it seems (see
+e.g. https://gcc.gnu.org/pipermail/gcc-cvs/2025-January/416094.html).
+
+So it looks like we will have to wait for the next gcc release to see
+if this works or not :)
 
 
 # Setting up the cross-compiler
@@ -52,7 +58,7 @@ above).
 
 Here are the specific commands to run -- note you should change the
 `--prefix` option to set the directory where you want to install the
-toolchain. (These commands are correct as of April 2025.)
+toolchain.
 
 ```
 $ git clone https://github.com/riscv-collab/riscv-gnu-toolchain.git
@@ -65,6 +71,11 @@ You should now be able to add "prefix/bin" to your PATH and use the
 cross-compiler tools. The tools will have a `riscv32-unknown-elf-`
 prefix, e.g. running `riscv32-unknown-elf-gcc` will give you the C
 compiler, `riscv32-unknown-elf-g++` is the C++ compiler, etc.
+
+__(Note: As of April 2025, with gcc 14.2, the above build procedure
+does work, but since "zicfilp" isn't supported by gcc yet,
+`--enable-cet` doesn't do anything useful it seems. My plan is to try
+again when gcc 15 comes out, and see what happens then.)__
 
 
 # See also

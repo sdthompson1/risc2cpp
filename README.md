@@ -12,9 +12,8 @@ the memory contents and registers of the RISC-V machine. Calling the
 and registers in the same way the original executable would have done.
 
 If the original executable makes syscalls (or "ecalls" as RISC-V calls
-them), then these will be passed back to the host program (i.e. the
-client of the C++ class) so that they can be handled in whatever way
-the host program desires.
+them), then these will be passed back to the host program so that
+they can be handled in whatever way the host program desires.
 
 ## Possible applications
 
@@ -27,68 +26,54 @@ execution.
 
 ## Limitations
 
-Only executables built for the RV32IM architecture (32-bit with the
-base integer and multiply/divide instructions only) will be supported.
-(The `-march` gcc flag can be used to build the executable for the
-appropriate architecture, or gcc can simply be configured for this
-architecture when it is built.)
+Only executables built for the RV32IM architecture (i.e. 32-bit RISC-V
+with the integer and multiply/divide instructions only) will be
+supported.
 
 There also needs to be a way for `riscv2cpp` to find all possible
-indirect branch targets within the executable. The plan is to use the
-`-fcf-protection` gcc option, which makes the compiler insert special
-"landing pad" instructions into the code at appropriate points. This
-apparently needs a RISC-V extension called
-[Zicfilp](https://github.com/riscv/riscv-cfi/blob/main/src/cfi_forward.adoc),
-support for which is only recently being added to gcc, it seems (see
-e.g. https://gcc.gnu.org/pipermail/gcc-cvs/2025-January/416094.html).
-
-So it looks like we will have to wait for the next gcc release to see
-if this works or not :)
+indirect branch targets within the executable. At the moment there are
+two possible ideas for this:
+ - We could ask the linker to add relocation info to the executable
+ file (linker `--emit-relocs` option) and then assume that any address
+ with a relocation attached is a potential jump destination.
+ - We could try using the `-fcf-protection` compiler option. This asks
+ the compiler to emit "landing pad" instructions (from the
+ ["Zicfilp"](https://github.com/riscv/riscv-cfi/blob/main/src/cfi_forward.adoc)
+ RISC-V extension) at every possible jump destination. This would be
+ very convenient but I am not sure how well compilers support the
+ "Zicfilp" extension at this point in time. Further investigation is
+ ongoing.
 
 
 # Setting up the cross-compiler
 
-We will use the following github repository to build gcc as a RISC-V
-cross-compiler: https://github.com/riscv-collab/riscv-gnu-toolchain
+So far I have been using the following github repository to build gcc
+as a RISC-V cross-compiler:
+https://github.com/riscv-collab/riscv-gnu-toolchain
 
-In particular, we will configure the compiler for the RV32IM
-architecture (only) and switch on the `--enable-cet` feature of gcc
-(so that `riscv2cpp` can find indirect jump targets, as explained
-above).
-
-Here are the specific commands to run -- note you should change the
-`--prefix` option to set the directory where you want to install the
-toolchain.
+The following commands will do the build and install. Note this will
+download several gigabytes of source code and may take a couple of
+hours to do the build. You may need to change the `--prefix` option
+below to set the directory where you want to install the toolchain.
 
 ```
 $ git clone https://github.com/riscv-collab/riscv-gnu-toolchain.git
 $ cd riscv-gnu-toolchain
 $ ./configure --prefix=$HOME/riscv --with-arch=rv32im --with-abi=ilp32 --with-languages=c,c++
-$ GCC_EXTRA_CONFIGURE_FLAGS=--enable-cet make
+$ make
 ```
 
-You should now be able to add "prefix/bin" to your PATH and use the
-cross-compiler tools. The tools will have a `riscv32-unknown-elf-`
-prefix, e.g. running `riscv32-unknown-elf-gcc` will give you the C
-compiler, `riscv32-unknown-elf-g++` is the C++ compiler, etc.
-
-__(Note: As of April 2025, with gcc 14.2, the above build procedure
-does work, but since "zicfilp" isn't supported by gcc yet,
-`--enable-cet` doesn't do anything useful it seems. My plan is to try
-again when gcc 15 comes out, and see what happens then.)__
+Now add "prefix/bin" to your PATH and you should have the
+cross-compiler tools, such as `riscv32-unknown-elf-gcc`,
+`riscv32-unknown-elf-g++` and so on, available.
 
 
 # See also
 
 This program is based on
-[Mips2cs](https://github.com/sdthompson1/mips2cs). The plan is to
-update the original Mips2cs tool (from 2011) to use RISC-V instead of
-MIPS as the base instruction set, to create a C++ target program
-instead of C#, and to use the RISC-V "Zicfilp" extension
-(`-fcf-protection` gcc flag) as an accurate way of finding indirect
-branch points (the original Mips2cs relied on the linker
-`--emit-relocs` option but `-fcf-protection` will probably be a
-simpler and more robust solution).
+[Mips2cs](https://github.com/sdthompson1/mips2cs), but I have modified
+(or will modify) it to work with RISC-V and C++, instead of MIPS and
+C#.
 
 See https://www.solarflare.org.uk/mips2cs for more details about
 Mips2cs.

@@ -6,12 +6,13 @@
 --   by doing a few Intermediate-to-Intermediate transformation passes.
 --
 --   The hope is that the transformed Intermediate code will produce 
---   a "better" C++ program than the original (for some value of "better").
+--   a better C++ program than the original.
 --
---   To be fair, with modern optimizing C++ compilers, there is less
---   need for a Simplifier pass than there was with, say, Mips2cs and
---   C# compilers back in 2011. Nevertheless, we leave it in, as
---   it can't hurt to give the C++ compiler a little help where we can.
+--   Whilst one might think that the Simplifier is pointless because
+--   the C++ compiler should be doing all the optimization, it turns
+--   out that using the Simplifier does actually produce slight
+--   improvements in the final executable's runtime and code size, so
+--   it is worth doing.
 --
 -- AUTHOR:
 --   Stephen Thompson <stephen@solarflare.org.uk>

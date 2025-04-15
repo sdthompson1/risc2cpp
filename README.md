@@ -61,6 +61,7 @@ prime numbers less than 1 billion. The following results were
 obtained:
 
 | Test case | Runtime (seconds) | Runtime (native = 1) |
+| --- | --: | --: |
 | Native binary | 7.451 s | 1.00 |
 | RISC-V binary with QEMU | 15.952 s | 2.14 |
 | RISC-V binary with `risc2cpp` | 18.352 s | 2.46 |
@@ -96,6 +97,7 @@ GB physical memory.
 As far as code size is concerned, we obtain the following figures:
 
 | Test case | Stripped binary size (bytes) |
+| --- | --: |
 | Native compiled binary (dynamically linked) | 14,472 |
 | Native compiled binary (statically linked) | 1,942,808 |
 | RISC-V compiled binary (statically linked) | 810,816 |

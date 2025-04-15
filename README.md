@@ -38,15 +38,77 @@ Only single-threaded executables built for the RV32IM architecture
 (i.e. 32-bit RISC-V with the integer and multiply/divide instructions
 only) are supported.
 
-The RISC-V executable must also have a symbol defined at every
-possible destination for an indirect jump instruction (i.e. JALR
-instruction); this is so that `risc2cpp` can understand the control
-flow graph of the program. In practice, this means two things: you
-should compile your RISC-V executables using `-Wl,--emit-relocs` (this
-causes the compiler to add the necessary symbols); and when building
-the RISC-V compiler toolchain, you should make sure you configure
-newlib with the `PREFER_SIZE_OVER_SPEED` option (one possible way of
-doing this is described below).
+The RISC-V executable must also have a symbol table, containing at
+least one symbol at every possible destination for an indirect jump
+instruction (i.e. JALR instruction). This is so that `risc2cpp` can
+understand the control flow graph of the program. In practice, this
+means two things: you should compile your RISC-V executables using
+`-Wl,--emit-relocs` (this causes the compiler to add the necessary
+symbol table entries); and when building the RISC-V compiler toolchain
+itself, you should make sure you configure `newlib` with the
+`PREFER_SIZE_OVER_SPEED` option (one possible way of doing this is
+described below).
+
+
+# Benchmarks
+
+Using Risc2cpp has a performance impact; tests show that the
+"virtualized" code runs at about half the speed of the original.
+
+In particular, we tested a simple C++ "prime number sieve" program
+(the exact code for which is given below). This program computes all
+prime numbers less than 1 billion. The following results were
+obtained:
+
+| Test case | Runtime (seconds) | Runtime (native = 1) |
+| Native binary | 7.451 s | 1.00 |
+| RISC-V binary with QEMU | 15.952 s | 2.14 |
+| RISC-V binary with `risc2cpp` | 18.352 s | 2.46 |
+| RISC-V binary with `risc2cpp -O2` | 14.336 s | 1.92 |
+
+Row 1 corresponds to building the prime sieve program directly on the
+host platform, using `g++ -O2` (g++ version 11.4.0), and then running
+it directly as a native executable. This gives the fastest runtime (of
+course), but without any sandboxing.
+
+Row 2 shows the runtime if the program is instead built for RISC-V
+(using `riscv32-unknown-elf-g++ -O2`, g++ version 14.2.0, with
+configuration options as given below), and then run using QEMU version
+6.2.0. This is relatively slow but provides a simple and effective
+method of sandboxing.
+
+Rows 3 and 4 show the runtime if the same RISC-V executable is first
+translated to a C++ program using either `risc2cpp` (Risc2cpp with
+default optimization), or `risc2cpp -O2` (Risc2cpp with its highest
+possible level of optimization), respectively, and then the resulting
+program is built (together with a wrapper `main.cpp` program as
+described below), using `g++ -O2` (g++ version 11.4.0), and then run.
+The resulting times are competitive with QEMU, and the time with
+`risc2cpp -O2` is actually slightly faster than QEMU in this case.
+(This is not unexpected, because QEMU uses JIT compilation while
+`risc2cpp` uses ahead-of-time compilation, and one would expect
+ahead-of-time compilation to be slightly faster.)
+
+All times given are the best of 3 consecutive execution attempts. The
+tests were done on a machine with a 2.3 GHz Intel i5-8259U CPU and 8
+GB physical memory.
+
+As far as code size is concerned, we obtain the following figures:
+
+| Test case | Stripped binary size (bytes) |
+| Native compiled binary (dynamically linked) | 14,472 |
+| Native compiled binary (statically linked) | 1,942,808 |
+| RISC-V compiled binary (statically linked) | 810,816 |
+| Code produced by `risc2cpp` (dynamically linked) | 5,060,912 |
+| Code produced by `risc2cpp` (statically linked) | 5,993,368 |
+| Code produced by `risc2cpp -O2` (dynamically linked) | 4,983,088 |
+| Code produced by `risc2cpp -O2` (statically linked) | 5,919,640 |
+
+It can be seen that the `risc2cpp` binaries come with a bit of a code
+size penalty, compared to the size of the original RISC-V binary for
+example. Fortunately, this is not much of an issue on modern PCs with
+gigabytes of RAM, but it might might mean that `risc2cpp` is less
+suitable for using in more memory-constrained environments.
 
 
 # Demo/Tutorial
@@ -147,12 +209,12 @@ Compile it for RISC-V:
 $ riscv32-unknown-elf-gcc hello.c -o hello.risc -Wl,--emit-relocs
 ```
 
-Note: The -Wl,--emit-relocs option is needed so that Risc2cpp can get
-the information it needs about indirect jump targets in the executable
-(see "How Risc2cpp works", below, for full details of why this is
-needed).
+Note: The `-Wl,--emit-relocs` option is needed so that Risc2cpp can
+get the information it needs about indirect jump targets in the
+executable (see "How Risc2cpp works", below, for full details of why
+this is needed).
 
-If you have qemu installed, you could try running this executable now
+If you have QEMU installed, you could try running this executable now
 (optional):
 
 ```
@@ -177,9 +239,11 @@ returning control to the VM by calling `RiscVM::execute()` again.
 Note that executables created by `riscv32-unknown-elf-gcc` will, by
 default, use a limited number of Linux-like syscalls in order to
 communicate with the outside world. In our case, it is necessary to
-implement syscall numbers 214 (`brk`), 64 (`write`) and 93 (`exit`)
-for our "hello world" program to function correctly. This can be done
-by writing a `main.cpp` program as follows:
+implement syscall numbers 214 (`brk`), 64 (`write`) and 93 (`exit`) so
+that our "hello world" program can function correctly. We also need to
+write a `main` function that instantiates the `RiscVM` class and calls
+`RiscVM::execute` as necessary. All this can be done by writing a
+`main.cpp` program as follows:
 
 ```
 #include "hello_vm.hpp"
@@ -314,11 +378,15 @@ Number of primes found: 50847534
 
 Now compile it for RISC-V (don't forget to use `-Wl,--emit-relocs`):
 
+```
 $ riscv32-unknown-elf-g++ -O2 prime_sieve.cpp -o prime_sieve.risc -Wl,--emit-relocs
+```
 
 Now run risc2cpp:
 
+```
 $ risc2cpp prime_sieve.risc prime_sieve_vm.hpp prime_sieve_vm.cpp
+```
 
 Note that prime_sieve_vm.cpp is very long -- this is due to
 the large amount of standard library code that is included with every
@@ -328,7 +396,7 @@ Now edit the previous `main.cpp` to include `prime_sieve_vm.hpp`
 instead of `hello_vm.hpp`, then build and run:
 
 ```
-$ g++ -O2 main.cpp -o prime_sieve_vm
+$ g++ -O2 main.cpp -o prime_sieve_vm.cpp
 $ ./prime_sieve_vm
 ```
 
@@ -340,7 +408,9 @@ On my machine, `prime_sieve_vm` takes about 2.4x as long to run as
 `prime_sieve`. We can improve this by using risc2cpp's optimization
 feature, as follows:
 
+```
 $ risc2cpp -O2 prime_sieve.risc prime_sieve_vm_opt.cpp
+```
 
 Risc2cpp has three optimization levels: `-O0` (no optimization, not
 recommended); `-O1` (light optimization, the default); and `-O2`
@@ -349,27 +419,30 @@ but you will get noticeably shorter and faster code as a result.
 
 We can now build and run the optimized version:
 
+```
 $ g++ -O2 main.cpp -o prime_sieve_vm_opt
 $ ./prime_sieve_vm_opt
+```
 
-On my machine, `prime_sieve_vm_opt` takes about 1.9x as long as the
-original `prime_sieve_vm`. 
+On my machine, `prime_sieve_vm_opt` takes about 1.9x as long to run as
+the original `prime_sieve`.
 
 
 # Troubleshooting
 
 If the generated C++ code throws a `std::runtime_error("Bad code
-address")` exception, then make sure you compiled your executable with
-`-Wl,--emit-relocs`, and that your toolchain was built with the proper
-newlib options if applicable (see "Demo/Tutorial" section above). If
-it still fails, then you will need to use a C++ debugger and put a
-breakpoint where the exception is being thrown, and try to figure out
-where the jump instruction is going to. If it appears to be going to a
-valid code address, then you will need to figure out a way to put a
-symbol at that address in your RISC-V executable, so that Risc2cpp
-knows that this is a possible jump target address. If it's an invalid
-address, then your program has probably just crashed for some reason
-(e.g. calling a null function pointer perhaps).
+address")` exception, then make sure you compiled your RISC-V
+executable with `-Wl,--emit-relocs`, and that your toolchain was built
+with the proper newlib options if applicable (see "Demo/Tutorial"
+section above). If it still fails, then you will need to use a C++
+debugger and put a breakpoint where that exception is being thrown,
+and try to work out where the jump instruction is going to. If it
+appears to be going to a valid code address, then you will need to
+figure out a way to put a symbol at that address in your RISC-V
+executable, so that Risc2cpp knows that this is a possible jump target
+address. If it's an invalid address, then your program has probably
+just crashed for some reason (e.g. calling a null function pointer
+perhaps).
 
 
 # How Risc2cpp works

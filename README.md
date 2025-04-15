@@ -67,6 +67,8 @@ obtained:
 | RISC-V binary with `risc2cpp` | 18.352 s | 2.46 |
 | RISC-V binary with `risc2cpp -O2` | 14.336 s | 1.92 |
 
+Details:
+
 Row 1 corresponds to building the prime sieve program directly on the
 host platform, using `g++ -O2` (g++ version 11.4.0), and then running
 it directly as a native executable. This gives the fastest runtime (of
@@ -83,12 +85,12 @@ translated to a C++ program using either `risc2cpp` (Risc2cpp with
 default optimization), or `risc2cpp -O2` (Risc2cpp with its highest
 possible level of optimization), respectively, and then the resulting
 program is built (together with a wrapper `main.cpp` program as
-described below), using `g++ -O2` (g++ version 11.4.0), and then run.
-The resulting times are competitive with QEMU, and the time with
-`risc2cpp -O2` is actually slightly faster than QEMU in this case.
-(This is not unexpected, because QEMU uses JIT compilation while
-`risc2cpp` uses ahead-of-time compilation, and one would expect
-ahead-of-time compilation to be slightly faster.)
+described below) using `g++ -O2` (g++ version 11.4.0). The resulting
+times are competitive with QEMU, and the time with `risc2cpp -O2` is
+actually slightly faster than QEMU in this case. (This is not
+unexpected, because QEMU uses JIT compilation while `risc2cpp` uses
+ahead-of-time compilation, and one would expect ahead-of-time
+compilation to be slightly faster.)
 
 All times given are the best of 3 consecutive execution attempts. The
 tests were done on a machine with a 2.3 GHz Intel i5-8259U CPU and 8

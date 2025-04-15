@@ -1,4 +1,4 @@
-# Riscv2cpp
+# Risc2cpp
 
 This tool will convert a RISC-V ELF executable into a C++ class that
 performs the same operations as the original executable, but in a

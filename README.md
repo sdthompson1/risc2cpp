@@ -468,7 +468,9 @@ s3;` in C++. (Because RISC-V instructions are always 4-byte aligned
 and exactly 4 bytes in length, it is easy to find and decode the
 instructions.)
 
-The RISC-V registers (`s0`, `t1` and so on) are represented by member
+Risc2cpp then creates code for a `RiscVM` class, in which the
+translated C++ code is placed into various `execute` methods. The
+RISC-V registers (`s0`, `t1` and so on) are represented by member
 variables of type `uint32_t` in the `RiscVM` class. The memory is
 represented by an array of 65,536 "pages" of 65,536 bytes (actually
 16,384 `uint32_t`s) each. Only pages actually in use are allocated,
@@ -647,10 +649,10 @@ array of `uint8_t`. For halfword and word operations, we could simply
 `memcpy` a 2 or 4 byte region into or out of the memory page. On x86
 this would most likely compile down to a single `mov` instruction in
 each case, since the architecture supports unaligned loads and stores.
-This might well improve the speed and reduce the compiled code size
-slightly. (This trick would only work on little-endian host machines,
-since the RISC-V is assumed to be little-endian, but that isn't much
-of an issue since almost everything is little-endian nowadays.)
+This might well improve the speed and reduce the code size slightly.
+(This trick would only work on little-endian host machines, but that
+isn't much of an issue since almost everything is little-endian
+nowadays.)
 
 For target programs that make heavy use of `memcpy` and/or `memset`,
 it might also be useful to "intercept" calls to those functions and

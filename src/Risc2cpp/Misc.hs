@@ -1,5 +1,5 @@
 -- MODULE:
---   Mips2cs.Misc
+--   Risc2cpp.Misc
 --
 -- PURPOSE:
 --   Miscellaneous useful routines
@@ -11,9 +11,9 @@
 --   11-Feb-2011
 --
 -- COPYRIGHT:
---   Copyright (C) Stephen Thompson, 2011.
+--   Copyright (C) Stephen Thompson, 2011, 2025.
 --
---   This file is part of Mips2cs. Mips2cs is distributed under the terms
+--   This file is part of Risc2cpp. Risc2cpp is distributed under the terms
 --   of the Boost Software License, Version 1.0, the text of which
 --   appears below.
 --
@@ -42,7 +42,7 @@
 --   DEALINGS IN THE SOFTWARE.
 
 
-module Mips2cs.Misc 
+module Risc2cpp.Misc
     ( toHex 
     , uniq )
 

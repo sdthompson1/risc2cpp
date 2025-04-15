@@ -1,5 +1,5 @@
 -- MODULE:
---   Mips2cs.Intermediate
+--   Risc2cpp.Intermediate
 --
 -- PURPOSE:
 --   Intermediate language, consisting of Statements and Exprs.
@@ -11,9 +11,9 @@
 --   26-Dec-2010
 --
 -- COPYRIGHT:
---   Copyright (C) Stephen Thompson, 2010 - 2011.
+--   Copyright (C) Stephen Thompson, 2010 - 2011, 2025.
 --
---   This file is part of Mips2cs. Mips2cs is distributed under the terms
+--   This file is part of Risc2cpp. Risc2cpp is distributed under the terms
 --   of the Boost Software License, Version 1.0, the text of which
 --   appears below.
 --
@@ -42,11 +42,10 @@
 --   DEALINGS IN THE SOFTWARE.
 
 
-module Mips2cs.Intermediate
+module Risc2cpp.Intermediate
     ( VarName
     , RegName
     , Addr
-    , runtimeErrorAddress
     , BinOp(..)
     , applyBinOp
     , isCommutative
@@ -78,20 +77,14 @@ type RegName = String
 
 type Addr = Word32
 
--- This address is jumped to when a runtime error is detected (e.g. a BREAK instruction)
-runtimeErrorAddress :: Addr
-runtimeErrorAddress = 0
-
 -- Binary operators
 -- At the moment, only 32-bit integer operators are supported.
 data BinOp = Add
-           | CheckedAdd
            | Sub
-           | CheckedSub
            | Mult
-           | MultU
            | MultHi
            | MultHiU
+           | MultHiSU
            | Quot
            | QuotU
            | Rem
@@ -109,13 +102,11 @@ data BinOp = Add
 -- Useful functions for working with operators
 applyBinOp :: BinOp -> Int32 -> Int32 -> Int32
 applyBinOp Add = (+)
-applyBinOp CheckedAdd = checked (+) (+)
 applyBinOp Sub = (-)
-applyBinOp CheckedSub = checked (-) (-)
 applyBinOp Mult = (*)
-applyBinOp MultHi = multFuncHi
-applyBinOp MultU = unsigned (*)
-applyBinOp MultHiU = unsigned multuFuncHi
+applyBinOp MultHi = multFuncHi True True
+applyBinOp MultHiU = multFuncHi False False
+applyBinOp MultHiSU = multFuncHi True False
 applyBinOp Quot = quot
 applyBinOp QuotU = unsigned quot
 applyBinOp Rem = rem
@@ -131,13 +122,11 @@ applyBinOp SetIfLessU = unsigned setIfLessFunc
 
 isCommutative :: BinOp -> Bool
 isCommutative Add = True
-isCommutative CheckedAdd = True
 isCommutative Sub = False
-isCommutative CheckedSub = False
 isCommutative Mult = True
-isCommutative MultU = True
 isCommutative MultHi = True
 isCommutative MultHiU = True
+isCommutative MultHiSU = False
 isCommutative Quot = False
 isCommutative QuotU = False
 isCommutative Rem = False
@@ -153,13 +142,11 @@ isCommutative SetIfLessU = False
 
 isAssociative :: BinOp -> Bool
 isAssociative Add = True
-isAssociative CheckedAdd = True
 isAssociative Sub = False
-isAssociative CheckedSub = False
 isAssociative Mult = True
-isAssociative MultU = True
 isAssociative MultHi = False
 isAssociative MultHiU = False
+isAssociative MultHiSU = False
 isAssociative Quot = False
 isAssociative QuotU = False
 isAssociative Rem = False
@@ -174,16 +161,6 @@ isAssociative SetIfLess = False
 isAssociative SetIfLessU = False
 
 -- Helper functions for the above
-checked :: (Int32 -> Int32 -> Int32) -> (Int64 -> Int64 -> Int64) -> Int32 -> Int32 -> Int32
-checked f32 f64 x32 y32 = 
-    let x64 = fromIntegral x32 :: Int64
-        y64 = fromIntegral y32 :: Int64
-        sum32 = f32 x32 y32 :: Int32
-        sum32as64 = fromIntegral sum32 :: Int64
-        sum64 = f64 x64 y64 :: Int64
-    in if sum32as64 == sum64 then sum32
-       else error "Compile time overflow in checked instruction. Not supported."
-
 unsigned :: (Word32 -> Word32 -> Word32) -> Int32 -> Int32 -> Int32
 unsigned f x y = fromIntegral $ f (fromIntegral x :: Word32) (fromIntegral y :: Word32)
 
@@ -196,18 +173,28 @@ shiftLeftFunc x y = x `shiftL` (fromIntegral y)
 shiftRightFunc :: (Bits a, Integral a) => a -> a -> a
 shiftRightFunc x y = x `shiftR` (fromIntegral y)
 
-multFuncHi :: Int32 -> Int32 -> Int32
-multFuncHi x y =
-    let z :: Int64
-        z = (fromIntegral x) * (fromIntegral y)
-    in fromIntegral (z `shiftR` 32)  -- this should chop off top 32 bits, so arith vs logical shift doesn't matter.
+multFuncHi :: Bool -> Bool -> Int32 -> Int32 -> Int32
+multFuncHi lhsIsSigned rhsIsSigned lhs rhs =
+    -- Extend both lhs and rhs to 64-bit (with appropriate signedness)
+    let extend64 :: Bool -> Int32 -> Int64
+        extend64 True i = fromIntegral i
+        extend64 False i = fromIntegral (fromIntegral i :: Word32)
 
-multuFuncHi :: Word32 -> Word32 -> Word32
-multuFuncHi x y = 
-    let z :: Word64
-        z = (fromIntegral x) * (fromIntegral y)
-    in fromIntegral (z `shiftR` 32)
+        lhs64 :: Int64
+        lhs64 = extend64 lhsIsSigned lhs
 
+        rhs64 :: Int64
+        rhs64 = extend64 rhsIsSigned rhs
+
+    -- Now compute the full 64-bit product (this is 64 x 64 -> 64 so it
+    -- doesn't matter whether we use signed or unsigned multiply)
+        fullProduct :: Int64
+        fullProduct = lhs64 * rhs64
+
+    -- Finally, take the top 32 bits of the result
+    -- (Arith vs logical right shift doesn't matter here, since we
+    -- only want the bottom 32 bits of the shifted result anyway)
+    in fromIntegral (fullProduct `shiftR` 32)
 
 -- Unary operators
 data UnOp = Negate
@@ -230,8 +217,6 @@ data Expr = LitExpr Int32
             deriving (Eq, Show)
 
 -- Types of memory load and store operations available.
--- Note: these can be used with unaligned addresses but the low bits will be implicitly masked out
--- e.g. a MemWord read from addr 3 will actually read from addr 0. This is exploited by the LWL, LWR implementations.
 data MemOp = MemByte
            | MemByteU  -- used for loads only
            | MemHalf
@@ -246,6 +231,8 @@ data Statement = Let VarName Expr           -- VarNames should be unique within 
                | StoreReg RegName Expr
                | Jump CondExpr Addr Addr    -- if condition true, goto first addr, else goto second.
                | IndirectJump Expr
+               | Syscall Addr               -- do a syscall, then continue from Addr
+               | Break                      -- debugger breakpoint instruction
                  deriving (Eq, Show)
 
 -- Conditional expressions, used for branches.
@@ -260,8 +247,10 @@ data CondOp = Equal
             | LessThan
             | GtrEqual
             | LessEqual
+            | GtrThanU
             | LessThanU
             | GtrEqualU
+            | LessEqualU
               deriving (Eq, Show)
 
 
@@ -273,8 +262,10 @@ applyCond GtrThan = (>)
 applyCond LessThan = (<)
 applyCond GtrEqual = (>=)
 applyCond LessEqual = (<=)
+applyCond GtrThanU = unsignedCond (>)
 applyCond LessThanU = unsignedCond (<)
 applyCond GtrEqualU = unsignedCond (>=)
+applyCond LessEqualU = unsignedCond (<=)
 
 unsignedCond :: (Word32->Word32->Bool) -> Int32 -> Int32 -> Bool
 unsignedCond op a b = ((fromIntegral a)::Word32) `op` ((fromIntegral b)::Word32)
@@ -288,6 +279,8 @@ mapOverExprs f (StoreMem m e1 e2) = StoreMem m (f e1) (f e2)
 mapOverExprs f (StoreReg n e) = StoreReg n (f e)
 mapOverExprs f (Jump c a1 a2) = Jump (mapOverExprsC f c) a1 a2
 mapOverExprs f (IndirectJump e) = IndirectJump (f e)
+mapOverExprs f (Syscall a) = (Syscall a)
+mapOverExprs f Break = Break
 
 mapOverExprsC :: (Expr -> Expr) -> CondExpr -> CondExpr
 mapOverExprsC f (BinCond op e1 e2) = BinCond op (f e1) (f e2)
@@ -304,6 +297,8 @@ findExprsInStmt (StoreMem _ e1 e2) = [e1, e2]
 findExprsInStmt (StoreReg _ e) = [e]
 findExprsInStmt (Jump c _ _) = findExprsInCondExpr c
 findExprsInStmt (IndirectJump e) = [e]
+findExprsInStmt (Syscall _) = []
+findExprsInStmt Break = []
 
 findExprsInCondExpr :: CondExpr -> [Expr]
 findExprsInCondExpr (BinCond _ e1 e2) = [e1, e2]

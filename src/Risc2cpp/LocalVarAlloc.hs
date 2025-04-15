@@ -1,5 +1,5 @@
 -- MODULE:
---   Mips2cs.LocalVarAlloc
+--   Risc2cpp.LocalVarAlloc
 --
 -- PURPOSE:
 --   Renames the variables in Let statements to minimize the number of
@@ -13,9 +13,9 @@
 --   7-Aug-2011
 --
 -- COPYRIGHT:
---   Copyright (C) Stephen Thompson, 2011.
+--   Copyright (C) Stephen Thompson, 2011, 2025.
 --
---   This file is part of Mips2cs. Mips2cs is distributed under the terms
+--   This file is part of Risc2cpp. Risc2cpp is distributed under the terms
 --   of the Boost Software License, Version 1.0, the text of which
 --   appears below.
 --
@@ -43,14 +43,14 @@
 --   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 --   DEALINGS IN THE SOFTWARE.
 
-module Mips2cs.LocalVarAlloc 
+module Risc2cpp.LocalVarAlloc
 
     ( allocLocalVars )    -- [Statement] -> [Statement]
 
 where
 
-import Mips2cs.Intermediate
-import Mips2cs.Misc
+import Risc2cpp.Intermediate
+import Risc2cpp.Misc
 
 import Data.List
 import qualified Data.Map as Map

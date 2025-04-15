@@ -1,17 +1,17 @@
 -- MODULE:
---   Mips2cs.Simplifier
+--   Risc2cpp.Simplifier
 --
 -- PURPOSE:
 --   The Simplifier's job is to optimize the Intermediate representation
 --   by doing a few Intermediate-to-Intermediate transformation passes.
 --
 --   The hope is that the transformed Intermediate code will produce 
---   a "better" C# program than the original (for some value of "better").
+--   a "better" C++ program than the original (for some value of "better").
 --
---   Our main aim is to try to reduce the size of the compiled C# binary,
---   with speed improvements being a secondary goal. (We hope that the JIT
---   does a reasonable job of optimizing for speed, so hopefully we don't 
---   need to do too much in that respect).
+--   To be fair, with modern optimizing C++ compilers, there is less
+--   need for a Simplifier pass than there was with, say, Mips2cs and
+--   C# compilers back in 2011. Nevertheless, we leave it in, as
+--   it can't hurt to give the C++ compiler a little help where we can.
 --
 -- AUTHOR:
 --   Stephen Thompson <stephen@solarflare.org.uk>
@@ -20,9 +20,9 @@
 --   27-Dec-2010
 --
 -- COPYRIGHT:
---   Copyright (C) Stephen Thompson, 2010 - 2011.
+--   Copyright (C) Stephen Thompson, 2010 - 2011, 2025.
 --
---   This file is part of Mips2cs. Mips2cs is distributed under the terms
+--   This file is part of Risc2cpp. Risc2cpp is distributed under the terms
 --   of the Boost Software License, Version 1.0, the text of which
 --   appears below.
 --
@@ -51,13 +51,13 @@
 --   DEALINGS IN THE SOFTWARE.
 
 
-module Mips2cs.Simplifier
-    ( simplify     -- Int -> [Addr] -> [Addr] -> Map Addr [Statement] -> Map Addr [Statement]
+module Risc2cpp.Simplifier
+    ( simplify     -- Int -> [Addr] -> Map Addr [Statement] -> Map Addr [Statement]
     )
 
 where
 
-import Mips2cs.Intermediate
+import Risc2cpp.Intermediate
 
 import Data.Bits  -- for optimized Region handling
 import Data.Int
@@ -123,20 +123,15 @@ constFold (BinExpr op (LitExpr c1) (LitExpr c2)) = LitExpr (applyBinOp op c1 c2)
 constFold (BinExpr Add (LitExpr 0) x) = constFold x         -- 0 + x -> x
 constFold (BinExpr Add x (UnExpr Negate y)) = BinExpr Sub (constFold x) (constFold y)  -- x + (-y) -> x - y
 constFold (BinExpr Add (UnExpr Negate x) y) = BinExpr Sub (constFold y) (constFold x)  -- (-x) + y -> y - x
-constFold (BinExpr CheckedAdd (LitExpr 0) x) = constFold x  -- 0 + x -> x
 
 constFold (BinExpr Sub x (LitExpr 0)) = constFold x         -- x - 0 -> x
 constFold (BinExpr Sub (LitExpr 0) x) = UnExpr Negate (constFold x)   -- 0 - x -> (-x)
 constFold (BinExpr Sub x y) | x == y = LitExpr 0            -- x - x -> 0
 constFold (BinExpr Sub x (UnExpr Negate y)) = BinExpr Add (constFold x) (constFold y)   -- x - (-y) -> x + y
-constFold (BinExpr CheckedSub x (LitExpr 0)) = constFold x  -- x - 0 -> x
-constFold (BinExpr CheckedSub x y) | x == y = LitExpr 0     -- x - x -> 0
 
 constFold (BinExpr Mult (LitExpr 1) x) = constFold x        -- 1 * x -> x
 constFold (BinExpr Mult (LitExpr 0) x) = LitExpr 0          -- 0 * x -> 0
-constFold (BinExpr Mult (LitExpr (-1)) x) = UnExpr Negate (constFold x)     -- (-1) * x -> x
-constFold (BinExpr MultU (LitExpr 1) x) = constFold x       -- 1 * x -> x
-constFold (BinExpr MultU (LitExpr 0) x) = LitExpr 0         -- 0 * x -> 0
+constFold (BinExpr Mult (LitExpr (-1)) x) = UnExpr Negate (constFold x)     -- (-1) * x -> (-x)
 constFold (BinExpr MultHi (LitExpr 0) x) = LitExpr 0        -- 0 * x -> 0
 constFold (BinExpr MultHiU (LitExpr 1) x) = LitExpr 0       -- 1 * x -> x, hi word is therefore zero, when unsigned
 constFold (BinExpr MultHiU (LitExpr 0) x) = LitExpr 0       -- 0 * x -> 0
@@ -184,6 +179,7 @@ constFoldC (BinCond Equal (BinExpr SetIfLessU e1 e2) (LitExpr 0)) = BinCond GtrE
 constFoldC (BinCond NotEqual (BinExpr SetIfLess e1 e2) (LitExpr 0)) = BinCond LessThan e1 e2    -- Sometimes happens with SLT, SLTI
 constFoldC (BinCond Equal (BinExpr SetIfLess e1 e2) (LitExpr 0)) = BinCond GtrEqual e1 e2    -- Ditto
 constFoldC (BinCond LessThanU _ (LitExpr 0)) = LitCond False    -- Nothing can be less than 0 (unsigned)
+constFoldC (BinCond GtrEqualU _ (LitExpr 0)) = LitCond True     -- Everything is >= 0 (unsigned)
 constFoldC (BinCond op e1 e2) = BinCond op (runConstFold e1) (runConstFold e2)  -- Apply regular constant folding to sub-expressions
 constFoldC c@(LitCond _) = c
 
@@ -208,17 +204,17 @@ runConstFoldC = recursively constFoldC
 -- No doubt the JIT will remove these, but it still inflates the size of the 
 -- executable...)
 
-substitute :: Map RegName Region -> [Statement] -> [Statement]
-substitute _ [] = []
-substitute rrs ((Let var rhs):stmts)
-    | canSubstitute rrs var rhs stmts =
+substitute :: [Statement] -> [Statement]
+substitute [] = []
+substitute ((Let var rhs):stmts)
+    | canSubstitute var rhs stmts =
         -- We can get rid of this Let and substitute it directly into the following stmts.
         let newStmts = map (mapOverExprs (substVarInExpr (var,rhs))) stmts
-        in substitute rrs newStmts
-substitute rrs (stmt:stmts) = 
+        in substitute newStmts
+substitute (stmt:stmts) =
     -- We cannot get rid of this statement, we just have to include it unmodified in the output,
     -- then continue trying to substitute the following statements.
-    stmt : substitute rrs stmts
+    stmt : substitute stmts
 
 --- Function to substitute for variables in an expression.
 substVarInExpr :: (VarName,Expr) -> Expr -> Expr
@@ -237,9 +233,9 @@ substVarInCondExpr _ x@(LitCond _) = x
 
 -- Determine whether we want to substitute for a particular variable (True),
 -- or just leave it as a Let (False).
-canSubstitute :: Map RegName Region -> VarName -> Expr -> [Statement] -> Bool
-canSubstitute rrs varName rhs stmts =
-    let hazard = dataHazard rrs varName rhs stmts
+canSubstitute :: VarName -> Expr -> [Statement] -> Bool
+canSubstitute varName rhs stmts =
+    let hazard = dataHazard varName rhs stmts
         varRefs = concatMap (findRefsToVarS varName) stmts
         zeroOrOneVarRefs = case varRefs of 
                               (x:y:_) -> False
@@ -252,6 +248,23 @@ canSubstitute rrs varName rhs stmts =
     in (not hazard) && (isSimple || zeroOrOneVarRefs)
 
 
+-- Determines if there is a data hazard, i.e. a sequence of statements
+-- containing something like the following:
+--   * Let x = ReadReg(foo)
+--   * WriteReg foo
+--   * Let y = x
+-- Substituting x would be invalid because you are then reading register foo
+-- after it has been written.
+dataHazard :: VarName -> Expr -> [Statement] -> Bool
+dataHazard varName expr stmts =
+    let readRegion = getReadRegionE expr
+    in case findWriteToRegion readRegion stmts of
+         Nothing -> False   -- That region is never written, so there can't be a data hazard
+         Just newStmts ->
+             -- If there is any reference to varName in newStmts, we have a hazard.
+             not $ null $ concatMap (findRefsToVarS varName) newStmts
+
+
 -- Find references to a given variable.
 findRefsToVarS :: VarName -> Statement -> [()]
 findRefsToVarS varName (Let _ e)          = findRefsToVarE varName e
@@ -259,6 +272,8 @@ findRefsToVarS varName (StoreMem _ e1 e2) = findRefsToVarE varName e1 ++ findRef
 findRefsToVarS varName (StoreReg _ e)     = findRefsToVarE varName e
 findRefsToVarS varName (Jump c _ _)       = findRefsToVarC varName c
 findRefsToVarS varName (IndirectJump e)   = findRefsToVarE varName e
+findRefsToVarS _ (Syscall _) = []
+findRefsToVarS _ Break = []
 
 findRefsToVarE :: RegName -> Expr -> [()]
 findRefsToVarE v (LitExpr _) = []
@@ -274,8 +289,10 @@ findRefsToVarC v (BinCond _ e1 e2) = findRefsToVarE v e1 ++ findRefsToVarE v e2
 findRefsToVarC v (LitCond _) = []
 
 
--- Constant propagation: if there is a StoreReg r (LitExpr n)
--- then replace any later (LoadReg r) with (LitExpr n).
+
+-- Optimization pass: Constant propagation
+-- If there is a StoreReg r (LitExpr n), then replace any later
+-- (LoadReg r), where r wasn't overwritten yet, with (LitExpr n).
 -- This can sometimes expose further opportunities for constant folding.
 constantPropagation :: [Statement] -> [Statement]
 constantPropagation = snd . mapAccumL constPropFunc Map.empty
@@ -307,7 +324,7 @@ substRegs env (LoadRegExpr r) =
 
 -- Current implementation uses bitwise operations for speed.
 
-type Region = Word64   -- Memory is assumed to be "1", registers are "2" and above
+type Region = Word64
 type RegionNames = Map RegName Region
 
 allRegion :: Region
@@ -320,94 +337,91 @@ rgnDifference :: Region -> Region -> Region
 rgnDifference a b = a .&. (complement b)
 
 rgnEmpty = 0
+
+-- Bit 0 of the region mask refers to memory
 rgnMemory = 1
 
-
-makeRegRegions :: [Statement] -> Map RegName Region
-makeRegRegions stmts = 
-    let allRegNames = (concatMap findRegNamesS stmts) ++ baseRegs
-        sortedRegNames = Set.toList $ Set.fromList $ allRegNames
-        powersOfTwo = iterate (*2) 2
-    in Map.fromList (zip sortedRegNames powersOfTwo)
-
--- Find all register names referenced in a particular Statement
-findRegNamesS :: Statement -> [RegName]
-findRegNamesS (Let _ e)          = findRegNamesE e
-findRegNamesS (StoreMem _ e1 e2) = findRegNamesE e1 ++ findRegNamesE e2
-findRegNamesS (StoreReg r e)     = r : findRegNamesE e
-findRegNamesS (Jump c _ _)       = findRegNamesC c
-findRegNamesS (IndirectJump e)   = findRegNamesE e
-
-findRegNamesE :: Expr -> [RegName]
-findRegNamesE (LitExpr _)       = []
-findRegNamesE (VarExpr _)       = []
-findRegNamesE (UnExpr _ e)      = findRegNamesE e
-findRegNamesE (BinExpr _ e1 e2) = findRegNamesE e1 ++ findRegNamesE e2
-findRegNamesE (LoadMemExpr _ e) = findRegNamesE e
-findRegNamesE (LoadRegExpr r)   = [r]
-
-findRegNamesC :: CondExpr -> [RegName]
-findRegNamesC (BinCond _ e1 e2) = findRegNamesE e1 ++ findRegNamesE e2
-findRegNamesC (LitCond _)       = []
+-- Bits 1 and above refer to registers.
+-- (Note: RISC-V dependent code.)
+regNameToRegion :: RegName -> Region
+regNameToRegion "ra" = 0x2
+regNameToRegion "sp" = 0x4
+regNameToRegion "gp" = 0x8
+regNameToRegion "tp" = 0x10
+regNameToRegion "t0" = 0x20
+regNameToRegion "t1" = 0x40
+regNameToRegion "t2" = 0x80
+regNameToRegion "s0" = 0x100
+regNameToRegion "s1" = 0x200
+regNameToRegion "a0" = 0x400
+regNameToRegion "a1" = 0x800
+regNameToRegion "a2" = 0x1000
+regNameToRegion "a3" = 0x2000
+regNameToRegion "a4" = 0x4000
+regNameToRegion "a5" = 0x8000
+regNameToRegion "a6" = 0x10000
+regNameToRegion "a7" = 0x20000
+regNameToRegion "s2" = 0x40000
+regNameToRegion "s3" = 0x80000
+regNameToRegion "s4" = 0x100000
+regNameToRegion "s5" = 0x200000
+regNameToRegion "s6" = 0x400000
+regNameToRegion "s7" = 0x800000
+regNameToRegion "s8" = 0x1000000
+regNameToRegion "s9" = 0x2000000
+regNameToRegion "s10" = 0x4000000
+regNameToRegion "s11" = 0x8000000
+regNameToRegion "t3" = 0x10000000
+regNameToRegion "t4" = 0x20000000
+regNameToRegion "t5" = 0x40000000
+regNameToRegion "t6" = 0x80000000
 
 
 regionsOverlap :: Region -> Region -> Bool
 regionsOverlap r1 r2 = (r1 .&. r2) /= 0
 
-getReadRegionE :: Map RegName Region -> Expr -> Region
-getReadRegionE rrs (LitExpr _) = rgnEmpty
-getReadRegionE rrs (VarExpr _) = rgnEmpty
-getReadRegionE rrs (UnExpr _ e) = getReadRegionE rrs e
-getReadRegionE rrs (BinExpr _ e1 e2) = rgnUnion (getReadRegionE rrs e1) (getReadRegionE rrs e2)
-getReadRegionE rrs (LoadMemExpr _ e) = rgnUnion rgnMemory (getReadRegionE rrs e)
-getReadRegionE rrs (LoadRegExpr r) = rrs Map.! r
+getReadRegionE :: Expr -> Region
+getReadRegionE (LitExpr _) = rgnEmpty
+getReadRegionE (VarExpr _) = rgnEmpty
+getReadRegionE (UnExpr _ e) = getReadRegionE e
+getReadRegionE (BinExpr _ e1 e2) = rgnUnion (getReadRegionE e1) (getReadRegionE e2)
+getReadRegionE (LoadMemExpr _ e) = rgnUnion rgnMemory (getReadRegionE e)
+getReadRegionE (LoadRegExpr r) = regNameToRegion r
 
-getReadRegionC :: Map RegName Region -> CondExpr -> Region
-getReadRegionC rrs (BinCond _ e1 e2) = rgnUnion (getReadRegionE rrs e1) (getReadRegionE rrs e2)
-getReadRegionC rrs (LitCond _) = rgnEmpty
+getReadRegionC :: CondExpr -> Region
+getReadRegionC (BinCond _ e1 e2) = rgnUnion (getReadRegionE e1) (getReadRegionE e2)
+getReadRegionC (LitCond _) = rgnEmpty
 
-getReadRegionS :: Map RegName Region -> Statement -> Region
-getReadRegionS rrs (Let _ rhs) = getReadRegionE rrs rhs
-getReadRegionS rrs (StoreMem _ addr val) = rgnUnion (getReadRegionE rrs addr) (getReadRegionE rrs val)
-getReadRegionS rrs (StoreReg _ val) = getReadRegionE rrs val
-getReadRegionS rrs (Jump c _ _) = getReadRegionC rrs c
-getReadRegionS rrs (IndirectJump e) = getReadRegionE rrs e
+getReadRegionS :: Statement -> Region
+getReadRegionS (Let _ rhs) = getReadRegionE rhs
+getReadRegionS (StoreMem _ addr val) = rgnUnion (getReadRegionE addr) (getReadRegionE val)
+getReadRegionS (StoreReg _ val) = getReadRegionE val
+getReadRegionS (Jump c _ _) = getReadRegionC c
+getReadRegionS (IndirectJump e) = getReadRegionE e
+getReadRegionS (Syscall _) = maxBound   -- assume a syscall could read anything
+getReadRegionS Break = rgnEmpty   -- a break terminates execution (without reading anything)
 
-getWriteRegionS :: Map RegName Region -> Statement -> Region
-getWriteRegionS rrs (Let _ _) = rgnEmpty
-getWriteRegionS rrs (StoreMem _ _ _) = rgnMemory
-getWriteRegionS rrs (StoreReg r _) = rrs Map.! r
-getWriteRegionS rrs (Jump _ _ _) = rgnEmpty
-getWriteRegionS rrs (IndirectJump _) = rgnEmpty
+getWriteRegionS :: Statement -> Region
+getWriteRegionS (Let _ _) = rgnEmpty
+getWriteRegionS (StoreMem _ _ _) = rgnMemory
+getWriteRegionS (StoreReg r _) = regNameToRegion r
+getWriteRegionS (Jump _ _ _) = rgnEmpty
+getWriteRegionS (IndirectJump _) = rgnEmpty
+getWriteRegionS (Syscall _) = maxBound  -- assume a syscall could write anything
+getWriteRegionS Break = rgnEmpty  -- a break terminates execution (without writing anything)
 
-
--- Determines if there is a data hazard, i.e. a sequence of statements 
--- containing something like the following:
---   * Let x = ReadReg(foo)
---   * WriteReg foo
---   * Let y = x
--- Substituting x would be invalid because you are then reading register foo
--- after it has been written.
-dataHazard :: Map RegName Region -> VarName -> Expr -> [Statement] -> Bool
-dataHazard rrs varName expr stmts = 
-    let readRegion = getReadRegionE rrs expr
-    in case findWriteToRegion rrs readRegion stmts of
-         Nothing -> False   -- That region is never written, so there can't be a data hazard
-         Just newStmts ->
-             -- If there is any reference to varName in newStmts, we have a hazard.
-             not $ null $ concatMap (findRefsToVarS varName) newStmts
 
 -- findWriteToRegion
 -- Returns:
 --  (Nothing) if there is no statement that writes to the given region
 --  (Just tail) if there IS a write to that region; (tail) contains all statements
 --   AFTER the offending write statement.
-findWriteToRegion :: Map RegName Region -> Region -> [Statement] -> Maybe [Statement]
-findWriteToRegion rrs readRegion [] = Nothing
-findWriteToRegion rrs readRegion (stmt:rest) = 
-    let writeRegion = getWriteRegionS rrs stmt
+findWriteToRegion :: Region -> [Statement] -> Maybe [Statement]
+findWriteToRegion readRegion [] = Nothing
+findWriteToRegion readRegion (stmt:rest) =
+    let writeRegion = getWriteRegionS stmt
     in if regionsOverlap readRegion writeRegion then Just rest
-       else findWriteToRegion rrs readRegion rest
+       else findWriteToRegion readRegion rest
 
 
 
@@ -419,46 +433,24 @@ data JumpTarget = Direct Addr | Indirect   deriving (Show)
 -- GEN = vars that are read before being written
 -- KILL = vars that are written
 -- Return value is (gen, kill).
-findGenAndKill :: Map RegName Region -> [Statement] -> (Region, Region)
-findGenAndKill rrs stmts = 
+findGenAndKill :: [Statement] -> (Region, Region)
+findGenAndKill stmts =
     foldr f (rgnEmpty, rgnEmpty) stmts
         where f stmt (gen, kill)
-                  = let rd = getReadRegionS rrs stmt
-                        wr = getWriteRegionS rrs stmt
+                  = let rd = getReadRegionS stmt
+                        wr = getWriteRegionS stmt
                     in (rgnUnion (rgnDifference gen wr) rd,
                         rgnUnion kill wr)
 
--- Find all possible successors from a Jump or IndirectJump statement
+-- Find all possible successors from a Jump, IndirectJump, Syscall or Break statement
 findSuccessors :: Statement -> [JumpTarget]
 findSuccessors (Jump (LitCond True)  a _) = [Direct a]
 findSuccessors (Jump (LitCond False) _ a) = [Direct a]
 findSuccessors (Jump _ a b)               = [Direct a, Direct b]
 findSuccessors (IndirectJump e)           = [Indirect]
-findSuccessors _ = error "findSuccessors can only be called on Jump or IndirectJump statements"
-
--- Defines the gen and kill sets for the kernel functions.
--- Input is the list of user callbacks that are referenced in the program.
--- Note: This is MIPS architecture dependent.
-baseGenAndKill :: Map RegName Region -> [Addr] -> Map Addr (Region,Region)
-baseGenAndKill rrs kernelAddrs = Map.fromList list
-    where list = [ (0, (rgnEmpty,rgnEmpty))                                    -- halt
-                 , (4, (rgnMemory + rrs Map.! "ra", rgnMemory))                -- yield
-                 , (8, (rrs Map.! "ra" + rrs Map.! "a0", rrs Map.! "v0")) ]    -- sbrk
-                    ++ [(x, rgnsFuncCall) | x <- kernelAddrs]                  -- user callbacks
-          rgnsFuncCall = (rgnMemory + rrs Map.! "a0" + rrs Map.! "a1" + rrs Map.! "a2" + rrs Map.! "a3" + rrs Map.! "ra",
-                          rgnMemory + rrs Map.! "v0" + rrs Map.! "v1")
-
-baseRegs :: [RegName]
-baseRegs = ["a0","a1","a2","a3","ra","v0","v1"]
-
--- Defines the possible successor blocks for the kernel functions.
--- Input is the list of user callbacks that are referenced in the program.
-baseSuccessors :: [Addr] -> Map Addr [JumpTarget]
-baseSuccessors kernelAddrs = Map.fromList list
-    where list = [ (0, [])            -- halt
-                 , (4, [Indirect])    -- yield
-                 , (8, [Indirect]) ]  -- sbrk
-                  ++ [(x, [Indirect]) | x <- kernelAddrs]  -- user callbacks
+findSuccessors (Syscall a)                = [Direct a]
+findSuccessors Break                      = []
+findSuccessors _ = error "findSuccessors can only be called on Jump, IndirectJump, Syscall or Break statements"
 
 
 -- Work function to do one iteration of the liveness analysis for a given basic block
@@ -495,18 +487,17 @@ livenessIterateAll indJumpTargets successors genKillRegions oldMap =
     in foldr (doLivenessUpdate successors genKillRegions cachedInSetOfIndirect) oldMap blocks
 
 
--- Master routine to do liveness analysis
--- Input: register regions, indirect jump targets, "kernel" block addrs, all basic blocks
+-- Main routine to do liveness analysis
+-- Input: register regions, indirect jump targets, all basic blocks
 -- Output: a map from basic blocks to their In and Out regions.
-livenessAnalysis :: Map RegName Region -> [Addr] -> [Addr] -> Map Addr [Statement] -> Map Addr (Region, Region)
-livenessAnalysis rrs indJumpTargets kernelAddrs blocks = 
+livenessAnalysis :: [Addr] -> Map Addr [Statement] -> Map Addr (Region, Region)
+livenessAnalysis indJumpTargets blocks =
     let successors :: Map Addr [JumpTarget]
-        successors = Map.union (Map.map (findSuccessors . last) blocks) (baseSuccessors kernelAddrs)
+        successors = Map.union (Map.map (findSuccessors . last) blocks) Map.empty
         genKillSets :: Map Addr (Region,Region)
-        genKillSets = Map.union (Map.map (findGenAndKill rrs) blocks) (baseGenAndKill rrs kernelAddrs)
+        genKillSets = Map.union (Map.map findGenAndKill blocks) Map.empty
         initialInOutSets :: Map Addr (Region,Region)
-        initialInOutSets = Map.union (Map.map (\b -> (rgnEmpty,rgnEmpty)) blocks) (Map.fromList [(x, (rgnEmpty,rgnEmpty)) | x <- lowMemAddrs])
-        lowMemAddrs = [0,4,8] ++ kernelAddrs
+        initialInOutSets = Map.union (Map.map (\b -> (rgnEmpty,rgnEmpty)) blocks) Map.empty
     in recursively (livenessIterateAll indJumpTargets successors genKillSets) initialInOutSets
 
 
@@ -545,18 +536,18 @@ isStoreTo _ _ = False
 
 
 -- Replace dead StoreRegs with Lets
-replaceDeadStores1 :: Map RegName Region -> Region -> Int -> [Statement] -> [Statement]
-replaceDeadStores1 rrs liveOnExit vnum ((StoreReg r e):rest)
-    | not (regionsOverlap (rrs Map.! r) liveOnExit)    -- store to a dead register
+replaceDeadStores1 :: Region -> Int -> [Statement] -> [Statement]
+replaceDeadStores1 liveOnExit vnum ((StoreReg r e):rest)
+    | not (regionsOverlap (regNameToRegion r) liveOnExit)    -- store to a dead register
         = let varName = "dead_var_" ++ show vnum
-          in (Let varName e) : replaceDeadStores1 rrs liveOnExit (vnum+1) (regToVar r varName rest)
-replaceDeadStores1 rrs liveOnExit vnum (s:rest) = s : replaceDeadStores1 rrs liveOnExit vnum rest
-replaceDeadStores1 _ _ _ [] = []
+          in (Let varName e) : replaceDeadStores1 liveOnExit (vnum+1) (regToVar r varName rest)
+replaceDeadStores1 liveOnExit vnum (s:rest) = s : replaceDeadStores1 liveOnExit vnum rest
+replaceDeadStores1 _ _ [] = []
 
-replaceDeadStores :: Map RegName Region -> Map Addr (Region,Region) -> Addr -> [Statement] -> [Statement]
-replaceDeadStores rrs livenessResults addr stmts =
+replaceDeadStores :: Map Addr (Region,Region) -> Addr -> [Statement] -> [Statement]
+replaceDeadStores livenessResults addr stmts =
     let liveOnExit = snd (livenessResults Map.! addr)
-    in replaceDeadStores1 rrs liveOnExit 0 stmts
+    in replaceDeadStores1 liveOnExit 0 stmts
 
 
 -- Remove useless assignments of form x = x.
@@ -567,15 +558,14 @@ removeUselessAssignments = filter f
           f _ = True
 
 
--- Master function to run all optimization passes.
-simplify :: Int -> [Addr] -> [Addr] -> Map Addr [Statement] -> Map Addr [Statement]
-simplify optimizationLevel indJumpTargets kernelAddrs basicBlocks = 
-    let rrs = makeRegRegions (concat (Map.elems basicBlocks))                                    :: Map RegName Region
-        withLets = Map.map (replaceNonFinalStores 0) basicBlocks                                 :: Map Addr [Statement]
-        localSimplifiedBlocks = Map.map (recursively (simplifyBB1 rrs)) withLets                 :: Map Addr [Statement]
-        livenessResults = livenessAnalysis rrs indJumpTargets kernelAddrs localSimplifiedBlocks  :: Map Addr (Region,Region)
-        deadStoreResult = Map.mapWithKey (replaceDeadStores rrs livenessResults) localSimplifiedBlocks  :: Map Addr [Statement]
-        secondSimplifyRound = Map.map (recursively (simplifyBB1 rrs)) deadStoreResult            :: Map Addr [Statement]
+-- Main function to run all optimization passes.
+simplify :: Int -> [Addr] -> Map Addr [Statement] -> Map Addr [Statement]
+simplify optimizationLevel indJumpTargets basicBlocks =
+    let withLets = Map.map (replaceNonFinalStores 0) basicBlocks                                 :: Map Addr [Statement]
+        localSimplifiedBlocks = Map.map (recursively simplifyBB1) withLets                 :: Map Addr [Statement]
+        livenessResults = livenessAnalysis indJumpTargets localSimplifiedBlocks  :: Map Addr (Region,Region)
+        deadStoreResult = Map.mapWithKey (replaceDeadStores livenessResults) localSimplifiedBlocks  :: Map Addr [Statement]
+        secondSimplifyRound = Map.map (recursively simplifyBB1) deadStoreResult            :: Map Addr [Statement]
     in case optimizationLevel of
          0 -> basicBlocks
          1 -> localSimplifiedBlocks
@@ -583,10 +573,10 @@ simplify optimizationLevel indJumpTargets kernelAddrs basicBlocks =
          _ -> error $ "Unknown optimization level: " ++ show optimizationLevel
 
 -- This does simplifications that can be done "locally" (i.e. one basic block at a time)
-simplifyBB1 :: Map RegName Region -> [Statement] -> [Statement]
-simplifyBB1 rrs stmts =
+simplifyBB1 :: [Statement] -> [Statement]
+simplifyBB1 stmts =
     let constFoldedStmts = map (mapOverExprs runConstFold) stmts
         constFolded2 = map (mapOverCondExprs runConstFoldC) constFoldedStmts
-        newStmts' = substitute rrs constFolded2
+        newStmts' = substitute constFolded2
         newStmts = constantPropagation newStmts'
     in removeUselessAssignments newStmts

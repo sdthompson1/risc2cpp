@@ -1,5 +1,5 @@
 -- MODULE:
---   Mips2cs.BasicBlock
+--   Risc2cpp.BasicBlock
 --
 -- PURPOSE:
 --   Extracts basic blocks from a chunk of Intermediate code
@@ -11,9 +11,9 @@
 --   6-Aug-2011
 --
 -- COPYRIGHT:
---   Copyright (C) Stephen Thompson, 2010 - 2011.
+--   Copyright (C) Stephen Thompson, 2010 - 2011, 2025.
 --
---   This file is part of Mips2cs. Mips2cs is distributed under the terms
+--   This file is part of Risc2cpp. Risc2cpp is distributed under the terms
 --   of the Boost Software License, Version 1.0, the text of which
 --   appears below.
 --
@@ -41,14 +41,14 @@
 --   ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 --   DEALINGS IN THE SOFTWARE.
 
-module Mips2cs.BasicBlock 
+module Risc2cpp.BasicBlock
 
     ( findBasicBlocks )     -- [Addr] -> [(Addr, [Statement])] -> ([Addr], Map Addr [Statement])                           
 
 where
 
-import Mips2cs.Intermediate
-import Mips2cs.Misc
+import Risc2cpp.Intermediate
+import Risc2cpp.Misc
 
 import Data.List
 import qualified Data.Map as Map
@@ -61,7 +61,7 @@ type AddrWithStmts = (Addr, [Statement])
 --  * all indirect jump targets
 --  * intermediate code (a list of (Addr, [Statement]) pairs -- one for each machine level instruction)
 -- Assumptions:
---  * input [Statement] lists contain at most one Jump/IndirectJump, and if it exists, it is at the end of the list.
+--  * input [Statement] lists contain at most one Jump/IndirectJump/Syscall/Break, and if it exists, it is at the end of the list.
 --  * input addrsWithStmts is sorted in ascending order of address
 --  * indirect jump targets list is NOT necessarily sorted
 -- Process:
@@ -69,30 +69,29 @@ type AddrWithStmts = (Addr, [Statement])
 --     * the input indirect jump addresses
 --     * any direct jump targets found in the code
 -- Output:
---  * a list of "kernel" addresses that the code jumps to. (>=0x10 and <=0xffff)
 --  * the list of basic blocks (a map of Addr to [Statement] -- one entry for each basic block.)
 -- Note:
 --  Output basic blocks will satisfy the following condition:
---   * Final statement is a Jump or IndirectJump
+--   * Final statement is a Jump, IndirectJump, Syscall or Break
 --   * The other statements are all StoreReg or StoreMem.
 
-findBasicBlocks :: [Addr] -> [AddrWithStmts] -> ([Addr], Map Addr [Statement])
+findBasicBlocks :: [Addr] -> [AddrWithStmts] -> Map Addr [Statement]
 findBasicBlocks indirectJumpTargets addrsWithStmts =
     let allStmts = concat (map snd addrsWithStmts)
         allDirectTargets = concatMap findDirectJumpTargets allStmts
-        sortedTargets = (uniq . sort) (allDirectTargets ++ indirectJumpTargets)
-        (kernelAddrs, jumpAddrs) = span (<0x10000) sortedTargets
+        jumpAddrs = (uniq . sort) (allDirectTargets ++ indirectJumpTargets)
 
         splitByJumpTargets' = splitUpList jumpAddrs addrsWithStmts   :: [[AddrWithStmts]]
         splitByJumpTargets = removeHeadIfEmpty splitByJumpTargets'  -- needed in case very first addr is actually a jump target
         truncated = map truncateAfterJump splitByJumpTargets        :: [[AddrWithStmts]]
-        combined = map combineInsns truncated                       :: [AddrWithStmts]
+        combined = map combineInsns (filter (/=[]) truncated)       :: [AddrWithStmts]
         basicBlocks = map addJumpIfNeeded (zip combined (tail combined ++ [error "Fell through final block!"] ))
 
-    in (dropWhile (<0x10) kernelAddrs, Map.fromList basicBlocks)
+    in Map.fromList basicBlocks
 
 findDirectJumpTargets :: Statement -> [Addr]
 findDirectJumpTargets (Jump _ a1 a2) = [a1,a2]
+findDirectJumpTargets (Syscall a) = [a]
 findDirectJumpTargets _ = []
 
 splitUpList :: [Addr] -> [AddrWithStmts] -> [[AddrWithStmts]]
@@ -102,7 +101,6 @@ splitUpList (end:ends) insns =
     in (thisChunk : splitUpList ends nextChunks)
 
 -- this removes unreachable code in between two basic blocks
--- (e.g. this can be caused by mips delay slots)
 truncateAfterJump :: [AddrWithStmts] -> [AddrWithStmts]
 truncateAfterJump insns = 
     let (beforeJump, jumpAndLater) = break (endsWithJump . snd) insns
@@ -115,6 +113,8 @@ endsWithJump [] = False
 endsWithJump xs = case (last xs) of
                     Jump _ _ _ -> True
                     IndirectJump _ -> True
+                    Syscall _ -> True
+                    Break -> True   -- a break is considered a "jump to nowhere"!
                     _ -> False
 
 combineInsns :: [AddrWithStmts] -> AddrWithStmts

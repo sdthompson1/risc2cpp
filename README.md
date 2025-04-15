@@ -616,6 +616,26 @@ need to compile the RISC-V executable with special options such as
 compilers fully support this extension yet, but perhaps this would be
 an interesting thing to investigate in the future.
 
+Perhaps the handling of the virtual machine's memory could be improved
+as well. At the moment, the memory is represented as an array of
+"pages" where each page is an array of `uint32_t`s. This makes word
+access very easy, but byte and halfword accesses require some extra
+work. Perhaps it would be better simply to represent each page as an
+array of `uint8_t`. For halfword and word operations, we could simply
+`memcpy` a 2 or 4 byte region into or out of the memory page. On x86
+this would most likely compile down to a single `mov` instruction in
+each case, since the architecture supports unaligned loads and stores.
+This might well improve the speed and reduce the compiled code size
+slightly. (This trick would only work on little-endian host machines,
+since the RISC-V is assumed to be little-endian, but that isn't much
+of an issue since almost everything is little-endian nowadays.)
+
+For target programs that make heavy use of `memcpy` and/or `memset`,
+it might also be useful to "intercept" calls to those functions and
+redirect them to use the native `memcpy` and `memset` operations
+instead. This would probably give a significant speed boost to such
+programs.
+
 
 # See also
 

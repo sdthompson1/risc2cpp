@@ -84,7 +84,7 @@ optParser = Options
             <*> strArgument
                     ( metavar "OUTPUT.hpp"
                     <> help "Output .hpp filename" )
-            <*> strOption
+            <*> strArgument
                     ( metavar "OUTPUT.cpp"
                     <> help "Output .cpp filename" )
 

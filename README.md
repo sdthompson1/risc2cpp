@@ -398,7 +398,7 @@ Now edit the previous `main.cpp` to include `prime_sieve_vm.hpp`
 instead of `hello_vm.hpp`, then build and run:
 
 ```
-$ g++ -O2 main.cpp -o prime_sieve_vm.cpp
+$ g++ -O2 main.cpp prime_sieve_vm.cpp -o prime_sieve_vm
 $ ./prime_sieve_vm
 ```
 
@@ -411,7 +411,7 @@ On my machine, `prime_sieve_vm` takes about 2.4x as long to run as
 feature, as follows:
 
 ```
-$ risc2cpp -O2 prime_sieve.risc prime_sieve_vm_opt.cpp
+$ risc2cpp -O2 prime_sieve.risc prime_sieve_vm_opt.hpp prime_sieve_vm_opt.cpp
 ```
 
 Risc2cpp has three optimization levels: `-O0` (no optimization, not
@@ -419,15 +419,17 @@ recommended); `-O1` (light optimization, the default); and `-O2`
 (heavy optimization). Note that `risc2cpp -O2` takes some time to run,
 but you will get noticeably shorter and faster code as a result.
 
-We can now build and run the optimized version:
+We can now build and run the optimized version. First edit `main.cpp`
+to include `prime_sieve_vm_opt.hpp` instead of `prime_sieve_vm.hpp`.
+Now run the following:
 
 ```
-$ g++ -O2 main.cpp -o prime_sieve_vm_opt
+$ g++ -O2 main.cpp prime_sieve_vm_opt.cpp -o prime_sieve_vm_opt
 $ ./prime_sieve_vm_opt
 ```
 
 On my machine, `prime_sieve_vm_opt` takes about 1.9x as long to run as
-the original `prime_sieve`.
+the original `prime_sieve`, which is better than the previous 2.4x.
 
 
 # Troubleshooting

@@ -46,19 +46,20 @@ means two things: you should compile your RISC-V executables using
 `-Wl,--emit-relocs` (this causes the compiler to add the necessary
 symbol table entries); and when building the RISC-V compiler toolchain
 itself, you should make sure you configure `newlib` with the
-`PREFER_SIZE_OVER_SPEED` option (one possible way of doing this is
-described below).
+`PREFER_SIZE_OVER_SPEED` option (one way of doing this is described
+below).
 
 
 # Benchmarks
 
-Using Risc2cpp has a performance impact; tests show that the
-"virtualized" code runs at about half the speed of the original.
+This section gives the results of a quick benchmarking exercise. The
+main conclusion is that Risc2cpp-compiled programs execute at about
+half the speed of the original executable.
 
-In particular, we tested a simple C++ "prime number sieve" program
-(the exact code for which is given below). This program computes all
-prime numbers less than 1 billion. The following results were
-obtained:
+We tested both Risc2cpp and QEMU with a simple C++ "prime number
+sieve" program (the exact code for which is given below). This program
+computes all prime numbers less than 1 billion. The following results
+were obtained:
 
 | Test case | Runtime (seconds) | Runtime (native = 1) |
 | --- | --: | --: |

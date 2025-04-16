@@ -629,6 +629,14 @@ and smaller final executables (as was demonstrated in the
 
 # Possible future work
 
+Additional RISC-V extensions could be supported. For example, some
+kind of support for floating point (F or D extensions) might be
+useful. (Currently, programs that use floating point can be compiled,
+but they will simulate floating point operations using integer
+instructions, which is slow.)
+
+Support for 64-bit RISC-V might also be useful at some point.
+
 The RISC-V
 ["Zicfilp"](https://github.com/riscv/riscv-cfi/blob/main/src/cfi_forward.adoc)
 extension provides an intriguing opportunity for removing the need to
@@ -658,7 +666,9 @@ For target programs that make heavy use of `memcpy` and/or `memset`,
 it might also be useful to "intercept" calls to those functions and
 redirect them to use the native `memcpy` and `memset` operations
 instead. This would probably give a significant speed boost to such
-programs.
+programs. Also, this would avoid the need to compile newlib with the
+`PREFER_SIZE_OVER_SPEED` option, because we would no longer be using
+newlib's problematic assembly language `memset` function.
 
 
 # See also

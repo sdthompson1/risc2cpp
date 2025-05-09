@@ -49,7 +49,7 @@ where
 import Risc2cpp.Intermediate
 import Risc2cpp.Misc
 
-import Data.Bits
+import Data.Bits ((.&.), shiftL, shiftR)
 import Data.Char
 import Data.Int
 import Data.List

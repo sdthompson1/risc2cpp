@@ -68,7 +68,7 @@ module Risc2cpp.Intermediate
 
 where
 
-import Data.Bits
+import Data.Bits (Bits, (.&.), (.|.), xor, complement, shiftL, shiftR)
 import Data.Int
 import Data.Word
 

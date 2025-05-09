@@ -60,7 +60,7 @@ where
 
 import Risc2cpp.Intermediate
 
-import Data.Bits  -- for optimized Region handling
+import Data.Bits ((.&.), (.|.), complement)  -- for optimized Region handling
 import Data.Int
 import Data.List
 import qualified Data.Map as Map

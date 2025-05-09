@@ -53,7 +53,7 @@ where
 import Risc2cpp.RiscV
 import Risc2cpp.Misc
 
-import Data.Bits
+import Data.Bits ((.&.), shiftL)
 import qualified Data.ByteString as B
 import Data.Char (ord)
 import Data.Elf

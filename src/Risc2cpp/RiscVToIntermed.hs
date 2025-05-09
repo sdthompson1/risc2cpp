@@ -52,7 +52,7 @@ import Risc2cpp.RiscV hiding (Addr)
 import Risc2cpp.Misc
 import Risc2cpp.Intermediate
 
-import Data.Bits
+import Data.Bits (shiftL)
 import Data.Char
 import Data.Int
 import Data.List
@@ -150,11 +150,11 @@ makeJAL pc dest imm =
 -- construct statements for a JALR
 makeJALR :: Addr -> Reg -> Int -> Reg -> [Statement]
 makeJALR pc dest imm src1 =
-    linkInsns pc dest ++
-        [IndirectJump
-         (BinExpr And
+    [Let "jump_dest" (BinExpr And
           (BinExpr Add (loadReg src1) (LitExpr (fromIntegral imm :: Int32)))
-          (LitExpr (fromIntegral (0xfffffffe::Word32))))]
+          (LitExpr (fromIntegral (0xfffffffe::Word32))))] ++
+    linkInsns pc dest ++    -- this might clobber src1, hence the need for "jump_dest"
+    [IndirectJump (VarExpr "jump_dest")]
 
 -- Converts an instruction into 1 or more Statements.
 convertInsn :: Addr -> Insn -> [Statement]
@@ -212,22 +212,29 @@ convertAllInsns :: [(Addr, Insn)] -> [(Addr, [Statement])]
 convertAllInsns = map (\(pc,insn) -> (pc, convertInsn pc insn))
 
 
--- Finding indirect jumps from Link instructions
+-- Finding indirect jumps from Link instructions and Ecalls.
+-- Note: The instruction following a Link instruction is very likely the target of a
+-- "jr ra" somewhere in the program, so that must be entered as a possible indirect
+-- jump target.
+-- The instruction following a Ecall is different; this isn't (usually) the target of
+-- any "jr" instruction. However, some users might want to use "setPC(addr)" where addr
+-- is the instruction after an Ecall, so we add those addresses to the indirect jumps
+-- list, in order to facilitate that.
 insnLinkTarget :: (Addr, Insn) -> Maybe Addr
-insnLinkTarget (addr, insn) = case getLinkRegister insn of
-                                Just Zero -> Nothing
-                                Just _ -> Just (addr+4)
-                                Nothing -> Nothing
+insnLinkTarget (addr, insn) = if isLinkOrEcall insn then Just (addr+4) else Nothing
 
-getLinkRegister :: Insn -> Maybe Reg
-getLinkRegister (JAL dest _) = Just dest
-getLinkRegister (JALR dest _ _) = Just dest
-getLinkRegister _ = Nothing
+isLinkOrEcall :: Insn -> Bool
+isLinkOrEcall (JAL Zero _)    = False
+isLinkOrEcall (JAL _ _)       = True
+isLinkOrEcall (JALR Zero _ _) = False
+isLinkOrEcall (JALR _ _ _)    = True
+isLinkOrEcall ECALL           = True
+isLinkOrEcall _               = False
 
 
 -- The main routine to convert RiscV code into the Intermediate language.
 -- Inputs:
---   * indirect jumps, from relocs only. (not necessarily sorted.)
+--   * indirect jumps, from symbols only. (not necessarily sorted.)
 --   * instructions, as (Addr, Insn) pairs. (not necessarily sorted.)
 -- Output:
 --   * indirect jumps, all. (sorted, unique.)

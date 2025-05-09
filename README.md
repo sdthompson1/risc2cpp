@@ -177,22 +177,20 @@ First, make sure you have ghc and cabal (the Haskell compiler tools)
 installed. If not, you can install them from your OS's package
 repository, or visit https://www.haskell.org/ghcup/.
 
-Next, install the Haskell packages required by Risc2cpp:
+Now, you should be able to build risc2cpp as follows:
 
 ```
 $ cabal update
-$ cabal install elf optparse-applicative --lib
+$ cabal build
 ```
 
-Now, build Risc2cpp itself:
+The `risc2cpp` executable will be hidden somewhere inside a
+`dist-newstyle` directory. You can use `cabal install` to install it
+in your `~/.local/bin`, or `cabal install --installdir=.` to place it
+in the current directory.
 
-```
-$ cd /path/to/risc2cpp/src
-$ ghc -O Main.hs -o risc2cpp
-```
-
-You can run `./risc2cpp` to check that the executable has built
-correctly.
+Running `risc2cpp` will print a usage message; you can use this to
+check that it has built correctly.
 
 ## Use Risc2cpp on a simple hello world program
 

@@ -61,13 +61,13 @@ type AddrWithStmts = (Addr, [Statement])
 --  * all indirect jump targets
 --  * intermediate code (a list of (Addr, [Statement]) pairs -- one for each machine level instruction)
 -- Assumptions:
---  * input [Statement] lists contain at most one Jump/IndirectJump/Syscall/Break, and if it exists, it is at the end of the list.
 --  * input addrsWithStmts is sorted in ascending order of address
 --  * indirect jump targets list is NOT necessarily sorted
 -- Process:
 --  * Splits the code into basic blocks at:
---     * the input indirect jump addresses
---     * any direct jump targets found in the code
+--     * jump, syscall or break instructions (these end a block)
+--     * the input indirect jump addresses (these begin a new block)
+--     * any direct jump targets found in the code (these begin a new block)
 -- Output:
 --  * the list of basic blocks (a map of Addr to [Statement] -- one entry for each basic block.)
 -- Note:

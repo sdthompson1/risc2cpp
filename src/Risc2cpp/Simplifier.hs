@@ -449,7 +449,7 @@ findSuccessors (Jump (LitCond True)  a _) = [Direct a]
 findSuccessors (Jump (LitCond False) _ a) = [Direct a]
 findSuccessors (Jump _ a b)               = [Direct a, Direct b]
 findSuccessors (IndirectJump e)           = [Indirect]
-findSuccessors (Syscall a)                = [Direct a]
+findSuccessors (Syscall a)                = [Direct a, Indirect]  -- Assume PC could be changed by the syscall handler (hence Indirect target needed)
 findSuccessors Break                      = []
 findSuccessors _ = error "findSuccessors can only be called on Jump, IndirectJump, Syscall or Break statements"
 

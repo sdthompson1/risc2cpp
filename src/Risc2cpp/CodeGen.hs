@@ -238,6 +238,17 @@ hppContents hppFilename numCodeChunks =
     ,"    virtual void handleInvalidAddress(uint32_t addr);"
     ,""
     ,""
+    ,"    // Useful constants"
+    ,""
+       -- Note: if changing BYTES_PER_PAGE you would also need to modify
+       -- a lot of other things in the code, because (unfortunately) we have
+       -- various hard coded expressions that are functions of the page size,
+       -- like (addr >> 16) or (addr & 0xffff), in multiple places.
+    ,"    static constexpr int NUM_PAGES = 65536;"
+    ,"    static constexpr int BYTES_PER_PAGE = 65536;"
+    ,"    static constexpr int WORDS_PER_PAGE = 16384;"
+    ,""
+    ,""
     ,"private:"
     ,"    void initCaseTable();"
     ,"    void initMem();"
@@ -246,12 +257,6 @@ hppContents hppFilename numCodeChunks =
     ]
     ++ map (\i -> "    int exec" ++ show i ++ "(int bx);") [0..numCodeChunks - 1]
     ++[""
-       -- Note: if changing BYTES_PER_PAGE you would also need to modify
-       -- a lot of other things in the code, because (unfortunately) we have
-       -- various hard coded expressions that are functions of the page size,
-       -- like (addr >> 16) or (addr & 0xffff), in multiple places.
-    ,"    enum { NUM_PAGES = 65536, BYTES_PER_PAGE = 65536, WORDS_PER_PAGE = 16384 };"
-    ,""
     ,"    uint32_t ra, sp, gp, tp, t0, t1, t2;"
     ,"    uint32_t s0, s1, a0, a1, a2, a3, a4, a5, a6, a7;"
     ,"    uint32_t s2, s3, s4, s5, s6, s7, s8, s9, s10, s11;"

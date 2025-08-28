@@ -66,8 +66,8 @@ import System.IO
 data Options = Options
   { optimizationLevel :: Int
   , inputFilename :: String
-  , outputHppFilename :: String
-  , outputCppFilename :: String
+  , outputPrefix :: String
+  , splitCpp :: Maybe Int
   }
 
 optParser :: Parser Options
@@ -82,11 +82,12 @@ optParser = Options
                     ( metavar "INPUT"
                     <> help "Input filename (must be a 32-bit RISC-V ELF executable)" )
             <*> strArgument
-                    ( metavar "OUTPUT.hpp"
-                    <> help "Output .hpp filename" )
-            <*> strArgument
-                    ( metavar "OUTPUT.cpp"
-                    <> help "Output .cpp filename" )
+                    ( metavar "OUTPUT"
+                    <> help "Output prefix - output files will be named OUTPUT.hpp and OUTPUT.cpp" )
+            <*> optional (option auto
+                    ( long "split-cpp"
+                    <> help "Split output into multiple .cpp files with N 'exec' methods per file"
+                    <> metavar "N" ))
 
 optParserInfo :: ParserInfo Options
 optParserInfo = info (optParser <**> helper)
@@ -116,13 +117,23 @@ main = do
   let simplified = simplify (optimizationLevel opts) allIndJumpTargets basicBlocks
 
   -- Generate the C++ code
-  let hppFilename = outputHppFilename opts
-  let cppFilename = outputCppFilename opts
-  let baseHppFilename = takeFileName hppFilename
+  let prefix = outputPrefix opts
+  let baseHppFilename = takeFileName prefix ++ ".hpp"
 
   let withLocVars = Map.map allocLocalVars simplified
-      (hppCode, cppCode) = codeGen baseHppFilename withLocVars allIndJumpTargets dataChunks (fromIntegral $ elfEntry elf) programBreak
+      (hppCode, cppCode) =
+          codeGen baseHppFilename
+                  (splitCpp opts)
+                  withLocVars
+                  allIndJumpTargets
+                  dataChunks
+                  (fromIntegral $ elfEntry elf)
+                  programBreak
 
   -- Save the results to the output files
-  writeFile hppFilename (intercalate "\n" hppCode)
-  writeFile cppFilename (intercalate "\n" cppCode)
+  writeFile (prefix ++ ".hpp") (intercalate "\n" hppCode)
+  case splitCpp opts of
+    Nothing -> writeFile (prefix ++ ".cpp") (intercalate "\n" (head cppCode))
+    Just _ -> mapM_ (\(fileNumber, cppChunk) -> 
+               writeFile (prefix ++ "-" ++ show fileNumber ++ ".cpp") (intercalate "\n" cppChunk))
+               (zip [0..] cppCode)

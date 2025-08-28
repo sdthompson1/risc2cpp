@@ -42,23 +42,17 @@ The RISC-V executable must also have a symbol table, containing at
 least one symbol at every possible destination for an indirect jump
 instruction (i.e. JALR instruction). This is so that `risc2cpp` can
 understand the control flow graph of the program. In practice, this
-means two things: you should compile your RISC-V executables using
+means two things: you need to compile your RISC-V executables using
 `-Wl,--emit-relocs` (this causes the compiler to add the necessary
-symbol table entries); and when building the RISC-V compiler toolchain
-itself, you should make sure you configure `newlib` with the
+symbol table entries); and when building the RISC-V compiler
+toolchain, you need to configure `newlib` with the
 `PREFER_SIZE_OVER_SPEED` option (one way of doing this is described
 below).
 
 
 # Benchmarks
 
-This section gives the results of a quick benchmarking exercise. The
-main conclusion is that Risc2cpp-compiled programs run at about half
-the speed of the original executable.
-
-We tested both Risc2cpp and QEMU with a simple C++ "prime number
-sieve" program (the exact code for which is given below). This program
-computes all prime numbers less than 1 billion. The following results
+In 2025 some performance testing was done and the following results
 were obtained:
 
 | Test case | Runtime (seconds) | Runtime (native = 1) |
@@ -68,52 +62,9 @@ were obtained:
 | RISC-V binary with `risc2cpp` | 18.352 s | 2.46 |
 | RISC-V binary with `risc2cpp -O2` | 14.336 s | 1.92 |
 
-Details:
-
-Row 1 corresponds to building the prime sieve program directly on the
-host platform, using `g++ -O2` (g++ version 11.4.0), and then running
-it directly as a native executable. This gives the fastest runtime (of
-course), but without any sandboxing.
-
-Row 2 shows the runtime if the program is instead built for RISC-V
-(using `riscv32-unknown-elf-g++ -O2`, g++ version 14.2.0, with
-configuration options as given below), and then run using QEMU version
-6.2.0. This is relatively slow but provides a simple and effective
-method of sandboxing.
-
-Rows 3 and 4 show the runtime if the same RISC-V executable is first
-translated to a C++ program using either `risc2cpp` (Risc2cpp with
-default optimization), or `risc2cpp -O2` (Risc2cpp with its highest
-possible level of optimization), respectively, and then the resulting
-program is built (together with a wrapper `main.cpp` program as
-described below) using `g++ -O2` (g++ version 11.4.0). The resulting
-times are competitive with QEMU, and the time with `risc2cpp -O2` is
-actually slightly faster than QEMU in this case. (This is not
-unexpected, because QEMU uses JIT compilation while `risc2cpp` uses
-ahead-of-time compilation, and one would expect ahead-of-time
-compilation to be slightly faster.)
-
-All times given are the best of 3 consecutive execution attempts. The
-tests were done on a machine with a 2.3 GHz Intel i5-8259U CPU and 8
-GB physical memory.
-
-As far as code size is concerned, we obtain the following figures:
-
-| Test case | Stripped binary size (bytes) |
-| --- | --: |
-| Native compiled binary (dynamically linked) | 14,472 |
-| Native compiled binary (statically linked) | 1,942,808 |
-| RISC-V compiled binary (statically linked) | 810,816 |
-| Code produced by `risc2cpp` (dynamically linked) | 5,060,912 |
-| Code produced by `risc2cpp` (statically linked) | 5,993,368 |
-| Code produced by `risc2cpp -O2` (dynamically linked) | 4,983,088 |
-| Code produced by `risc2cpp -O2` (statically linked) | 5,919,640 |
-
-It can be seen that the `risc2cpp` binaries come with a bit of a code
-size penalty, compared to the size of the original RISC-V binary for
-example. Fortunately, this is not much of an issue on modern PCs with
-gigabytes of RAM, but it might might mean that `risc2cpp` is less
-suitable for using in more memory-constrained environments.
+The main conclusion is that Risc2cpp-compiled programs run at about
+half of the speed of the original executable. Further details of the
+benchmarking methodology are given at the end of this file.
 
 
 # Demo/Tutorial
@@ -227,7 +178,7 @@ $ qemu-riscv32 hello.risc
 Next, run Risc2cpp on the `hello.risc` file:
 
 ```
-$ risc2cpp hello.risc hello_vm.hpp hello_vm.cpp
+$ risc2cpp hello.risc hello_vm
 ```
 
 This will create two files, `hello_vm.hpp` and `hello_vm.cpp`,
@@ -388,7 +339,7 @@ $ riscv32-unknown-elf-g++ -O2 prime_sieve.cpp -o prime_sieve.risc -Wl,--emit-rel
 Now run risc2cpp:
 
 ```
-$ risc2cpp prime_sieve.risc prime_sieve_vm.hpp prime_sieve_vm.cpp
+$ risc2cpp prime_sieve.risc prime_sieve_vm
 ```
 
 Note that prime_sieve_vm.cpp is very long -- this is due to
@@ -412,7 +363,7 @@ On my machine, `prime_sieve_vm` takes about 2.4x as long to run as
 feature, as follows:
 
 ```
-$ risc2cpp -O2 prime_sieve.risc prime_sieve_vm_opt.hpp prime_sieve_vm_opt.cpp
+$ risc2cpp -O2 prime_sieve.risc prime_sieve_vm_opt
 ```
 
 Risc2cpp has three optimization levels: `-O0` (no optimization, not
@@ -453,9 +404,9 @@ for some reason (e.g. calling a null function pointer perhaps).
 # How Risc2cpp works
 
 This section gives a rough overview of how Risc2cpp works. It is not
-necessary to understand this section in order to use Risc2cpp, but
-reading it might give some insight into why the generated C++ files
-are the way they are.
+necessary to understand this in order to use Risc2cpp, but reading it
+might give some insight into why the generated C++ files are the way
+they are.
 
 ## Basic idea
 
@@ -669,8 +620,67 @@ programs. Also, this would avoid the need to compile newlib with the
 newlib's problematic assembly language `memset` function.
 
 
+# Benchmarking details
+
+This section describes in more detail the process that was used to
+create the table of benchmarking results (see "Benchmarks" section
+above).
+
+The table consists of four rows. Each row details the runtime of the
+"prime number sieve" program (full source code given above), which
+computes all prime numbers less than 1 billion, for one particular way
+of building and running the code.
+
+Row 1 corresponds to building the prime sieve program directly on the
+host platform, using `g++ -O2` (g++ version 11.4.0), and then running
+it directly as a native executable.
+
+Row 2 shows the runtime if the program is instead built for RISC-V
+(using `riscv32-unknown-elf-g++ -O2`, g++ version 14.2.0, with
+configuration options as given below), and then run using QEMU version
+6.2.0. This is relatively slow but provides a simple and effective
+method of sandboxing.
+
+Rows 3 and 4 show the runtime if the same RISC-V executable is first
+translated to a C++ program using either `risc2cpp` (Risc2cpp with
+default optimization), or `risc2cpp -O2` (Risc2cpp with its highest
+possible level of optimization), respectively, and then the resulting
+program is built (together with a wrapper `main.cpp` program as
+described above) using `g++ -O2` (g++ version 11.4.0). The resulting
+times are competitive with QEMU, and the time with `risc2cpp -O2` is
+actually slightly faster than QEMU in this case. (This is not
+unexpected, because QEMU uses JIT compilation while `risc2cpp` uses
+ahead-of-time compilation, and one would expect ahead-of-time
+compilation to be slightly faster.)
+
+All times given are the best of 3 consecutive execution attempts. The
+tests were done on a machine with a 2.3 GHz Intel i5-8259U CPU and 8
+GB physical memory.
+
+As far as code size is concerned, we obtain the following figures:
+
+| Test case | Stripped binary size (bytes) |
+| --- | --: |
+| Native compiled binary (dynamically linked) | 14,472 |
+| Native compiled binary (statically linked) | 1,942,808 |
+| RISC-V compiled binary (statically linked) | 810,816 |
+| Code produced by `risc2cpp` (dynamically linked) | 5,060,912 |
+| Code produced by `risc2cpp` (statically linked) | 5,993,368 |
+| Code produced by `risc2cpp -O2` (dynamically linked) | 4,983,088 |
+| Code produced by `risc2cpp -O2` (statically linked) | 5,919,640 |
+
+It can be seen that the `risc2cpp` binaries come with a bit of a code
+size penalty, compared to the size of the original RISC-V binary for
+example. Fortunately, this is not much of an issue on modern PCs with
+gigabytes of RAM, but it might might mean that `risc2cpp` is less
+suitable for using in more memory-constrained environments.
+
+
 # See also
 
 Risc2cpp is based on
 [Mips2cs](https://github.com/sdthompson1/mips2cs), an earlier project
 by the same author.
+
+
+

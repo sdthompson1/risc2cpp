@@ -1,0 +1,9 @@
+banner constructed
+main starting
+ctor first
+ctor second
+ctor third
+alpha = 1
+beta = 2
+gamma = 3
+ctor inside_main

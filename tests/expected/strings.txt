@@ -1,0 +1,19 @@
+strlen      = 43
+strcmp eq   = 0
+strcmp lt   = 1
+strcmp gt   = 1
+strncmp     = 0
+strchr 'f'  = fox jumps over the lazy dog
+strchr 'z'  = zy dog
+strchr '?'  = (null)
+strrchr 'o' = og
+strstr      = jumps over the lazy dog
+strstr miss = (null)
+a init     : aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa aa
+b init     : 55 55 55 55 55 55 55 55 55 55 55 55 55 55 55 55
+a memcpy   : 68 65 6c 6c 6f 2c 20 77 6f 72 6c 64 21 00 00 00
+a memmove  : 68 65 68 65 6c 6c 6f 2c 20 77 6f 72 21 00 00 00
+b memset   : 55 55 55 55 00 00 00 00 00 00 00 00 55 55 55 55
+memcmp eq   = 0
+memcmp ne   = 1
+snprintf n  = 11, out = [ok] (7/42)

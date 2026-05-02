@@ -1,0 +1,2 @@
+Counting primes upto 1000000
+Number of primes found: 78498

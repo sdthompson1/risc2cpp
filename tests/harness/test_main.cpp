@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
+#include <stdexcept>
 
 // RISC-V Linux-style syscall numbers used by newlib.
 enum : uint32_t {
@@ -58,9 +59,17 @@ static bool handleEcall(RiscVM &vm)
 int main(void)
 {
     RiscVM vm;
-    while (true) {
-        vm.execute();
-        if (handleEcall(vm)) break;
+    try {
+        while (true) {
+            vm.execute();
+            if (handleEcall(vm)) break;
+        }
+    } catch (const std::runtime_error &e) {
+        // Generated VM throws std::runtime_error on stack overflow,
+        // invalid memory access, etc. Print deterministically so tests
+        // can match against expected output.
+        std::fflush(stdout);
+        std::printf("VM error: %s\n", e.what());
     }
     return 0;
 }

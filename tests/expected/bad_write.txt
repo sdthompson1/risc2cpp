@@ -1,0 +1,2 @@
+before
+VM error: Illegal memory access

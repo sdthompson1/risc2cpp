@@ -1,0 +1,18 @@
+test 1: catch by exact type
+  caught int 42
+test 2: catch via base class
+  caught: divide by zero
+test 3: unwinding runs destructors
+  ctor deep#3
+  ctor deep#2
+  ctor deep#1
+  ctor deep#0
+  dtor deep#0
+  dtor deep#1
+  dtor deep#2
+  dtor deep#3
+  caught runtime_error: boom
+test 4: rethrow
+  inner handler, rethrowing
+  outer caught: inner
+done

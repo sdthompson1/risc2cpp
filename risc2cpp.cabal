@@ -1,7 +1,9 @@
 cabal-version: 2.2
 name:          risc2cpp
 version:       0.1.0.0
-license:       BSL-1.0
+license:       BSL-1.0 OR MIT
+license-files: LICENSE-BSL-1.0
+               LICENSE-MIT
 author:        Stephen Thompson
 build-type:    Simple
 

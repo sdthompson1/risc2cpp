@@ -98,3 +98,10 @@ work.
 Risc2cpp is based on
 [Mips2cs](https://github.com/sdthompson1/mips2cs), an earlier project
 by the same author.
+
+
+# License
+
+Risc2cpp is dual-licensed under the Boost Software License 1.0
+([LICENSE-BSL-1.0](LICENSE-BSL-1.0)) or the MIT License
+([LICENSE-MIT](LICENSE-MIT)), at your option.

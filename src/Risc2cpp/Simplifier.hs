@@ -174,15 +174,14 @@ runConstFoldC = recursively constFoldC
 -- should be transformed into
 --    Let x3 = x0 + x1 + 5.
 --
--- The thinking behind this is that the C# compiler tends to produce more compact
--- bytecode for
+-- This means that we produce code like:
 --    int x3 = x0 + x1 + 5;
--- as opposed to 
+-- instead of:
 --    int x2 = x0 + x1;
 --    int x3 = x2 + 5;
--- (The latter case tends to create redundant load/store instructions in the IL.
--- No doubt the JIT will remove these, but it still inflates the size of the 
--- executable...)
+-- This means the generated C++ code is simpler, shorter, and uses fewer
+-- intermediate variables. It also (potentially) exposes more opportunities
+-- for our constant-folding and constant-propagation passes to run on.
 
 substitute :: [Statement] -> [Statement]
 substitute [] = []

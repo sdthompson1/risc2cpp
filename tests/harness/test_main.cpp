@@ -17,9 +17,13 @@
 
 // RISC-V Linux-style syscall numbers used by newlib.
 enum : uint32_t {
-    SYS_write = 64,
-    SYS_exit  = 93,
-    SYS_brk   = 214,
+    SYS_write     = 64,
+    SYS_exit      = 93,
+    SYS_brk       = 214,
+    // Test-only syscall, well above any Linux number, used by the .S
+    // tests in tests/src/ to print the value of a register as a signed
+    // decimal followed by a newline.
+    SYS_print_int = 0x10000,
 };
 
 static bool handleEcall(RiscVM &vm)
@@ -48,6 +52,10 @@ static bool handleEcall(RiscVM &vm)
 
     case SYS_exit:
         std::exit(static_cast<int>(vm.getA0()));
+
+    case SYS_print_int:
+        std::printf("%d\n", static_cast<int32_t>(vm.getA0()));
+        return false;
 
     default:
         // Unknown syscall: return -ENOSYS.

@@ -14,12 +14,26 @@ from pathlib import Path
 TESTS_DIR = Path(__file__).resolve().parent
 SRC_DIR = TESTS_DIR / "src"
 ELF_DIR = TESTS_DIR / "elf"
+ASM_DIR = TESTS_DIR / "asm"
+START_S = ASM_DIR / "start.S"
 
 CFLAGS = ["-O2", "-Wl,--emit-relocs"]
+# Flags for .S instruction tests: link the shared startup, no newlib,
+# no crt0 (we provide _start ourselves).
+ASMFLAGS = [
+    "-march=rv32im", "-mabi=ilp32",
+    "-nostdlib", "-nostartfiles",
+    "-Wl,--emit-relocs",
+]
 
 
-def compiler_for(src: Path) -> str:
-    return "riscv32-unknown-elf-g++" if src.suffix == ".cpp" else "riscv32-unknown-elf-gcc"
+def compile_cmd(src: Path, out: Path) -> list:
+    if src.suffix == ".S":
+        return ["riscv32-unknown-elf-gcc",
+                str(src), str(START_S),
+                "-o", str(out), *ASMFLAGS]
+    cc = "riscv32-unknown-elf-g++" if src.suffix == ".cpp" else "riscv32-unknown-elf-gcc"
+    return [cc, str(src), "-o", str(out), *CFLAGS]
 
 
 def main() -> int:
@@ -29,7 +43,7 @@ def main() -> int:
             return 1
 
     ELF_DIR.mkdir(exist_ok=True)
-    sources = sorted(p for p in SRC_DIR.iterdir() if p.suffix in (".c", ".cpp"))
+    sources = sorted(p for p in SRC_DIR.iterdir() if p.suffix in (".c", ".cpp", ".S"))
     if not sources:
         print(f"no sources found in {SRC_DIR}", file=sys.stderr)
         return 1
@@ -37,7 +51,7 @@ def main() -> int:
     failed = []
     for src in sources:
         out = ELF_DIR / (src.stem + ".risc")
-        cmd = [compiler_for(src), str(src), "-o", str(out), *CFLAGS]
+        cmd = compile_cmd(src, out)
         print("$", " ".join(cmd))
         result = subprocess.run(cmd)
         if result.returncode != 0:

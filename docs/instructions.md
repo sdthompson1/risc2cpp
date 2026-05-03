@@ -197,8 +197,7 @@ $ g++ main.cpp hello_vm.cpp -O2 -o hello_vm
 ```
 
 Now you can run `./hello_vm` and you should see the `Hello, world!`
-output, along with some debug output showing the system calls being
-made by the VM.
+output.
 
 
 # More complicated example: prime number sieve (in C++)
@@ -285,8 +284,7 @@ $ ./prime_sieve_vm
 ```
 
 Note that g++ takes a while to compile the code. You should find that
-`prime_sieve_vm` prints the same output as `prime_sieve` (plus some
-extra debug messages regarding ecalls).
+`prime_sieve_vm` prints the same output as `prime_sieve`.
 
 On my machine, `prime_sieve_vm` takes about 2.4x as long to run as
 `prime_sieve`. We can improve this by using risc2cpp's optimization

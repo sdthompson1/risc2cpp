@@ -525,9 +525,22 @@ replaceDeadStores1 liveOnExit vnum (s:rest) = s : replaceDeadStores1 liveOnExit 
 replaceDeadStores1 _ _ [] = []
 
 replaceDeadStores :: Map Addr (Region,Region) -> Addr -> [Statement] -> [Statement]
-replaceDeadStores livenessResults addr stmts =
-    let liveOnExit = snd (livenessResults Map.! addr)
-    in replaceDeadStores1 liveOnExit 0 stmts
+replaceDeadStores livenessResults addr stmts
+    -- A Syscall reads (and writes) all registers implicitly: the host
+    -- inspects them via vm.getA*() once execute() returns, but that
+    -- isn't visible in the IR as LoadRegExpr nodes that regToVar could
+    -- rewire. So if the block ends in a Syscall, no store earlier in
+    -- the block is dead, and there is nothing useful for
+    -- replaceDeadStores1 to do here -- skip it.
+    | endsInSyscall stmts = stmts
+    | otherwise =
+        let liveOnExit = snd (livenessResults Map.! addr)
+        in replaceDeadStores1 liveOnExit 0 stmts
+    where
+      endsInSyscall []  = False
+      endsInSyscall xs  = case last xs of
+                              Syscall _ -> True
+                              _         -> False
 
 
 -- Remove useless assignments of form x = x.
